@@ -13,6 +13,9 @@ const OPERATOR_NAME_KEY = "uav-gcs-operator-name";
 const MAX_ALERT_HISTORY = 80;
 let activePageName = "overview";
 let telemetryTransportMode = "boot";
+const DEV_TOOLS_KEY = "uav-gcs-dev-tools";
+const DEV_TOOLS_ENABLED = resolveDevToolsEnabled();
+document.documentElement.classList.toggle("dev-tools-enabled", DEV_TOOLS_ENABLED);
 
 const clock = $("#clock");
 const formatTime = (date) => new Intl.DateTimeFormat("zh-CN", {
@@ -28,7 +31,7 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 1000);
 
-let elapsedSeconds = 1 * 3600 + 24 * 60 + 38;
+let elapsedSeconds = 0;
 setInterval(() => {
   elapsedSeconds += 1;
   const h = String(Math.floor(elapsedSeconds / 3600)).padStart(2, "0");
@@ -59,6 +62,33 @@ function safeStorageSet(key, value) {
     localStorage.setItem(key, value);
   } catch (_) {}
 }
+
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (_) {}
+}
+
+function resolveDevToolsEnabled() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("dev") === "1" || params.get("devTools") === "1") {
+    safeStorageSet(DEV_TOOLS_KEY, "1");
+    return true;
+  }
+  if (params.get("dev") === "0" || params.get("devTools") === "0") {
+    safeStorageRemove(DEV_TOOLS_KEY);
+    return false;
+  }
+  return safeStorageGet(DEV_TOOLS_KEY) === "1";
+}
+
+function applyDevToolVisibility() {
+  $$("[data-dev-only]").forEach((element) => {
+    element.hidden = !DEV_TOOLS_ENABLED;
+  });
+}
+
+applyDevToolVisibility();
 
 let activeBuildSignature = "";
 let versionRefreshPrompted = false;
@@ -487,7 +517,7 @@ function installFlightOpsEnhancements() {
               <label class="aircraft-calibration-confirm">确认文本
                 <input id="aircraftCalibrationConfirmation" placeholder="请输入：已确认安全">
               </label>
-              <label class="aircraft-calibration-mock">
+              <label class="aircraft-calibration-mock" data-dev-only>
                 <input type="checkbox" id="aircraftCalibrationMock"> 模拟模式：未连接真实飞控，仅用于界面测试
               </label>
             </div>
@@ -687,6 +717,7 @@ function installFlightOpsEnhancements() {
   $("#aircraftCalibrationModal")?.addEventListener("click", (event) => {
     if (event.target?.id === "aircraftCalibrationModal") closeAircraftCalibrationGuide();
   });
+  applyDevToolVisibility();
 }
 
 installFlightOpsEnhancements();

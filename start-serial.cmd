@@ -1,6 +1,9 @@
 @echo off
 setlocal
 
+echo [LEGACY] Serial launcher helper. Normal operation should use start-ui.cmd.
+echo.
+
 set "PYTHON_EXE=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 
 if not exist "%PYTHON_EXE%" (

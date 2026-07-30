@@ -1,6 +1,9 @@
 @echo off
 setlocal
 
+echo [LEGACY] Demo helper. Normal operation should use start-ui.cmd.
+echo.
+
 set "PYTHON_EXE=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 set "UI_URL=http://127.0.0.1:8080/"
 
