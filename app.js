@@ -799,7 +799,10 @@ function updateTopFlightStatusBar(data = {}, online = false) {
   setTopFlightText("topFlightBattery", battery === null ? "--%" : `${battery}%`);
   setTopFlightText("topFlightLink", rate === null ? "-- Hz" : `${rate.toFixed(rate >= 10 ? 0 : 1)} Hz`);
   setTopFlightText("topFlightRc", rc.rc_status_text || rc.rc_signal_quality || "Unknown");
-  setTopFlightText("topFlightMission", $("#currentMissionTitle")?.textContent || "待规划");
+  const missionProgress = missionProgressFromTelemetry(data);
+  setTopFlightText("topFlightMission", missionProgress.active
+    ? `航点 #${missionProgress.currentSeq}${missionProgress.total ? "/" + missionProgress.total : ""}`
+    : ($("#currentMissionTitle")?.textContent || "待规划"));
 }
 
 function updateFlightModePanel(data = {}, online = false) {
@@ -1531,6 +1534,7 @@ async function startAircraftCalibration() {
       }),
     });
     aircraftCalibrationSessionId = response.session_id || response.session?.session_id || null;
+    if (response.commandId) trackCommandEvidence(response.commandId, `${card.title}飞机校准`);
     renderAircraftCalibrationLog(response.session);
     if (card.type === "accel" && response.session && response.session.status !== "rejected") {
       openAircraftCalibrationGuide(card.type, response.session);
@@ -2058,6 +2062,7 @@ let lastChartUiAt = 0;
 let lastDiagnosticTelemetryUiAt = 0;
 let lastReadinessTelemetryUiAt = 0;
 let flightDisplayDom = null;
+let realtimeInstrumentDriver = null;
 const smoothInstrumentStats = {
   attitudeFrames: 0,
   compassFrames: 0,
@@ -2153,7 +2158,23 @@ function formatLiveSpeed(value) {
   return Math.abs(numeric) < 10 ? numeric.toFixed(2) : numeric.toFixed(1);
 }
 
+function ensureRealtimeInstruments() {
+  if (realtimeInstrumentDriver) return realtimeInstrumentDriver;
+  if (!window.UAVRealtimeInstruments?.create) return null;
+  realtimeInstrumentDriver = window.UAVRealtimeInstruments.create({
+    elements: getFlightDisplayDom(),
+    signedAngle,
+    headingCardinal,
+    formatSpeed: formatLiveSpeed,
+    transportMode: () => telemetryTransportMode,
+    alpha: 0.93,
+    speedAlpha: 0.88,
+  });
+  return realtimeInstrumentDriver;
+}
+
 function renderAttitudeFrame(timestamp = 0) {
+  if (window.UAVRealtimeInstruments?.create) return;
   attitudeRender.running = true;
   if (timestamp && attitudeRender.lastFrameAt && timestamp - attitudeRender.lastFrameAt < 16) {
     requestAnimationFrame(renderAttitudeFrame);
@@ -2407,6 +2428,23 @@ function updateAttitude(data) {
   const yaw = finite(data.yaw) ? Number(data.yaw) : Number(data.heading);
   const normalizedYaw = (yaw % 360 + 360) % 360;
 
+  const instrumentDriver = ensureRealtimeInstruments();
+  if (instrumentDriver) {
+    instrumentDriver.setTarget({
+      roll,
+      pitch,
+      yaw: normalizedYaw,
+      rollRate: finite(data.rollRate) ? Number(data.rollRate) : 0,
+      pitchRate: finite(data.pitchRate) ? Number(data.pitchRate) : 0,
+      yawRate: finite(data.yawRate) ? Number(data.yawRate) : 0,
+      speed: finite(data.speed) ? Number(data.speed) : null,
+      timestamp: finite(data.attitudeTimeMs) ? Number(data.attitudeTimeMs) : Date.now(),
+    });
+    updateAttitude.lastAt = Date.now();
+    updateAttitude.onlineStateApplied = true;
+    return;
+  }
+
   attitudeRender.target.roll = roll;
   attitudeRender.target.pitch = pitch;
   attitudeRender.target.yaw = normalizedYaw;
@@ -2510,6 +2548,7 @@ async function requestFlightMode(modeKey) {
       return;
     }
     showToast("飞行模式命令已发送", result.reason);
+    trackCommandEvidence(result.commandId, `飞行模式切换：${label}`);
     const status = await waitForCommandStatus(result.commandId, 18, 350);
     if ($("#flightModeCommandState")) $("#flightModeCommandState").textContent = status.message || result.reason;
     if (status.status === "accepted") {
@@ -2556,6 +2595,7 @@ async function requestArmToggle() {
       return;
     }
     showToast(`${actionLabel}命令已发送`, result.reason);
+    trackCommandEvidence(result.commandId, `${actionLabel}飞机`);
     const status = await waitForCommandStatus(result.commandId, 22, 300);
     if (status.status === "accepted") {
       showToast(`${actionLabel}已被飞控确认`, status.message || "COMMAND_ACK accepted");
@@ -2726,6 +2766,7 @@ function updateTelemetry(data) {
   const diagnosticDue = nowMs - lastDiagnosticTelemetryUiAt >= 1000;
   const chartDue = nowMs - lastChartUiAt >= CHART_REDRAW_INTERVAL_MS;
   const mapDue = nowMs - lastMapVisualAt >= MAP_VISUAL_UPDATE_INTERVAL_MS;
+  renderMissionProgress(data);
   if (heavyDue) {
     lastHeavyTelemetryUiAt = nowMs;
     updateTopThrottle(data);
@@ -2924,9 +2965,12 @@ function setTelemetryOffline(message = "未连接") {
   setTelemetryOffline.lastAt = nowMs;
   lastTelemetryAt = 0;
   previousTelemetryReceivedAt = 0;
+  latestTelemetry = {};
+  renderMissionProgress({});
   attitudeRender.initialized = false;
   attitudeRender.target.speed = null;
   updateAttitude.onlineStateApplied = false;
+  ensureRealtimeInstruments()?.setOffline();
   updateTopThrottle({});
   updateArmButtonState({ connected: false, armed: false });
   renderRcLinkStatus({ rc_status_text: "Unknown", rc_signal_quality: "unknown", ui_level: "grey", warnings: ["未连接飞控，RC 链路状态不可用"] }, "gcsRc");
@@ -3141,23 +3185,6 @@ async function readJsonResponse(response, fallbackMessage = "请求失败") {
   return data;
 }
 
-async function api(path, options = {}) {
-  const method = (options.method || "GET").toUpperCase();
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (method !== "GET") {
-    const token = await ensureGcsSessionToken();
-    if (token) headers["X-GCS-Token"] = token;
-  }
-  const response = await fetch(path, {
-    cache: "no-store",
-    ...options,
-    headers
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "请求失败");
-  return data;
-}
-
 let currentUser = { authenticated: false, role: "guest", label: "未登录" };
 
 function applyAuthStatus(user = currentUser) {
@@ -3226,13 +3253,82 @@ $("#logoutButton")?.addEventListener("click", async () => {
   refreshSafetyState();
 });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const commandEvidenceLabels = new Map();
+
+function commandEvidenceLabel(commandId, fallback = "实机命令") {
+  return commandEvidenceLabels.get(commandId) || fallback;
+}
+
+function trackCommandEvidence(commandId, label, initialMessage = "命令已加入本地队列，等待发送到飞控") {
+  if (!commandId) return;
+  commandEvidenceLabels.set(commandId, label || "实机命令");
+  renderCommandEvidence({
+    status: "queued",
+    message: initialMessage,
+    commandId,
+    results: [],
+  }, commandEvidenceLabel(commandId));
+}
+
+function latestTelemetryStatusText() {
+  const texts = Array.isArray(latestTelemetry?.statustexts) ? latestTelemetry.statustexts : [];
+  if (texts.length) return texts.at(-1);
+  const warnings = Array.isArray(latestTelemetry?.warnings) ? latestTelemetry.warnings : [];
+  if (!warnings.length) return null;
+  const text = normalizeWarningItem(warnings.at(-1));
+  return text ? { text, severity: "WARNING", source: "PX4 STATUSTEXT" } : null;
+}
+
+function commandEvidenceFromStatus(status = {}) {
+  const results = Array.isArray(status.results) ? status.results : [];
+  const first = results[0] || {};
+  const ack = first.ack || first.commandAck || status.ack || null;
+  const ackText = ack
+    ? `${ack.resultText || ack.result || status.status || "--"}${ack.command !== undefined ? " · CMD " + ack.command : ""}`
+    : first.resultText || status.resultText || "--";
+  const statustext = first.latestStatustext || first.evidenceText || status.latestStatustext || status.evidenceText;
+  const telemetryText = latestTelemetryStatusText();
+  return {
+    ackText,
+    statustext: statustext || telemetryText?.text || "--",
+  };
+}
+
+function normalizeCommandStatusClass(statusText = "") {
+  const normalized = String(statusText || "").toLowerCase().replaceAll("_", "-");
+  if (normalized === "sent-no-ack") return "sent-no-ack";
+  return normalized || "queued";
+}
+
+function renderCommandEvidence(status = {}, label = "实机命令") {
+  const panel = $("#commandEvidencePanel");
+  if (!panel) return;
+  const normalizedClass = normalizeCommandStatusClass(status.status);
+  panel.classList.remove("queued", "running", "accepted", "partial", "sent-no-ack", "rejected", "failed", "timeout", "expired", "missing");
+  panel.classList.add(normalizedClass);
+  const evidence = commandEvidenceFromStatus(status);
+  const updated = status.updatedAt || Date.now();
+  if ($("#commandEvidenceTitle")) $("#commandEvidenceTitle").textContent = label || "实机命令闭环";
+  if ($("#commandEvidenceMessage")) $("#commandEvidenceMessage").textContent = status.message || "等待飞控回执";
+  if ($("#commandEvidenceStatus")) $("#commandEvidenceStatus").textContent = status.status || "--";
+  if ($("#commandEvidenceAck")) $("#commandEvidenceAck").textContent = evidence.ackText;
+  if ($("#commandEvidenceText")) $("#commandEvidenceText").textContent = evidence.statustext;
+  if ($("#commandEvidenceTime")) $("#commandEvidenceTime").textContent = updated
+    ? new Date(Number(updated)).toLocaleTimeString("zh-CN", { hour12: false })
+    : "--";
+}
 
 async function waitForCommandStatus(commandId, attempts = 18, intervalMs = 350) {
-  if (!commandId) return { status: "missing", message: "缺少命令编号" };
+  if (!commandId) {
+    const missing = { status: "missing", message: "缺少命令编号" };
+    renderCommandEvidence(missing, "实机命令");
+    return missing;
+  }
   let commandStatus = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     await sleep(intervalMs);
     commandStatus = await api(`/api/command/status?id=${encodeURIComponent(commandId)}`);
+    renderCommandEvidence(commandStatus, commandEvidenceLabel(commandId));
     if (!["queued", "running"].includes(commandStatus.status)) break;
   }
   return commandStatus || { status: "queued", message: "仍在等待飞控回执" };
@@ -3241,24 +3337,13 @@ async function waitForCommandStatus(commandId, attempts = 18, intervalMs = 350) 
 async function waitForCommandBatch(commands = []) {
   const statuses = [];
   for (const command of commands) {
+    if (command.id && !commandEvidenceLabels.has(command.id)) {
+      const label = command.name ? `写入参数 ${command.name}` : command.label || "批量实机命令";
+      trackCommandEvidence(command.id, label);
+    }
     statuses.push({ ...command, status: await waitForCommandStatus(command.id, 20, 300) });
   }
   return statuses;
-}
-
-async function uploadForm(path, formData) {
-  const headers = {};
-  const token = await ensureGcsSessionToken();
-  if (token) headers["X-GCS-Token"] = token;
-  const response = await fetch(path, {
-    method: "POST",
-    cache: "no-store",
-    headers,
-    body: formData
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "上传失败");
-  return data;
 }
 
 async function api(path, options = {}) {
@@ -3561,9 +3646,13 @@ async function waitForConnectorCommand(commandId, onUpdate, options = {}) {
   const attempts = options.attempts || 120;
   const delayMs = options.delayMs || 1000;
   let status = null;
+  if (commandId && !commandEvidenceLabels.has(commandId)) {
+    trackCommandEvidence(commandId, options.label || "实机命令");
+  }
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     await sleep(delayMs);
     status = await api(`/api/command/status?id=${encodeURIComponent(commandId)}`);
+    renderCommandEvidence(status, commandEvidenceLabel(commandId, options.label || "实机命令"));
     if (onUpdate) onUpdate(status);
     if (!["queued", "running"].includes(status.status)) break;
   }
@@ -3648,6 +3737,7 @@ $("#refreshOnboardLogs").addEventListener("click", async () => {
       $("#onboardLogStatus").textContent = response.reason;
       return showToast("飞控日志读取失败", response.reason);
     }
+    trackCommandEvidence(response.commandId, "读取飞控日志列表");
     const status = await waitForConnectorCommand(response.commandId, (item) => {
       $("#onboardLogStatus").textContent = item.message || "正在读取飞控日志列表...";
     }, { attempts: 15, delayMs: 800 });
@@ -3685,6 +3775,7 @@ $("#downloadOnboardLog").addEventListener("click", async () => {
       $("#downloadOnboardLog").disabled = false;
       return showToast("飞控日志下载失败", response.reason);
     }
+    trackCommandEvidence(response.commandId, "下载飞控 ULG 日志");
     const status = await waitForConnectorCommand(response.commandId, (item) => {
       const result = item.results?.[0] || {};
       const progress = result.progress !== undefined ? formatDownloadProgress(result) : "";
@@ -3828,6 +3919,7 @@ $("#startCalibration").addEventListener("click", async () => {
     });
     $("#calibrationStatus").textContent = response.reason;
     if (response.allowed && response.commandId) {
+      trackCommandEvidence(response.commandId, `${label}校准`);
       const waitOptions = type === "magnetometer"
         ? { attempts: 240, delayMs: 500 }
         : { attempts: 30, delayMs: 500 };
@@ -4053,6 +4145,7 @@ async function sendServoOutputs(outputs, label) {
     const result = await postServoOutputs(outputs);
     if (!result.accepted) return showToast("舵机指令被阻止", result.reason);
     showToast("舵机指令已发送", "等待飞控确认...");
+    trackCommandEvidence(result.commandId, label || "舵机测试");
     const commandStatus = await waitForCommandStatus(result.commandId);
     if (commandStatus?.message) {
       showToast("舵机测试回执", commandStatus.message);
@@ -4141,6 +4234,7 @@ async function motorHoldTick(token) {
     const response = await postMotorTest(body);
     if (!response.accepted) throw new Error(response.reason || "电机测试被阻止");
     if (!motorHoldAckChecked && response.commandId) {
+      trackCommandEvidence(response.commandId, "电机测试");
       const commandStatus = await waitForCommandStatus(response.commandId, 12, 250);
       motorHoldAckChecked = true;
       const result = commandStatus.results?.[0] || {};
@@ -4303,6 +4397,7 @@ $("#requestParameters").addEventListener("click", async () => {
       body: JSON.stringify({ names: parameterRows.map((row) => row.name) })
     });
     if (!response.accepted) return showToast("参数读取未开始", response.reason);
+    trackCommandEvidence(response.commandId, "请求 PX4 参数列表");
     const status = await waitForConnectorCommand(response.commandId, null, { attempts: 45, delayMs: 400 });
     const values = status?.results || [];
     values.forEach((item) => {
@@ -5160,6 +5255,32 @@ function missionRouteStats() {
   return { distance, minutes, avgSpeed };
 }
 
+function missionProgressFromTelemetry(data = latestTelemetry || {}) {
+  const current = data.missionCurrent || data.mission_current || {};
+  const reached = data.missionReached || data.mission_reached || {};
+  const currentSeq = finite(current.seq) ? Number(current.seq) : null;
+  const reachedSeq = finite(reached.seq) ? Number(reached.seq) : null;
+  const total = finite(current.total) && Number(current.total) > 0 ? Number(current.total) : null;
+  const ageMs = finite(current.timeMs) ? Math.max(0, Date.now() - Number(current.timeMs)) : null;
+  const active = currentSeq !== null && (ageMs === null || ageMs <= 5000);
+  return { current, reached, currentSeq, reachedSeq, total, ageMs, active };
+}
+
+function renderMissionProgress(data = latestTelemetry || {}) {
+  const progress = missionProgressFromTelemetry(data);
+  const currentText = progress.active
+    ? `#${progress.currentSeq}${progress.total ? ` / ${progress.total}` : ""}`
+    : "未执行";
+  const reachedText = progress.reachedSeq !== null ? `#${progress.reachedSeq}` : "--";
+  const stateText = progress.active
+    ? `MISSION_CURRENT · ${progress.ageMs !== null ? Math.round(progress.ageMs) + " ms" : "实时"}`
+    : "等待 MISSION_CURRENT";
+  if ($("#overviewMissionCurrent")) $("#overviewMissionCurrent").textContent = currentText;
+  if ($("#missionCurrentSeq")) $("#missionCurrentSeq").textContent = currentText;
+  if ($("#missionReachedSeq")) $("#missionReachedSeq").textContent = reachedText;
+  if ($("#missionCurrentState")) $("#missionCurrentState").textContent = stateText;
+}
+
 function updateMissionOverview() {
   const { distance, minutes } = missionRouteStats();
   const hasRoute = waypoints.length >= 2;
@@ -5175,6 +5296,7 @@ function updateMissionOverview() {
   $("#overviewWaypointCount").textContent = `${waypoints.length} 个`;
   $("#overviewMissionDistance").textContent = `${(distance / 1000).toFixed(2)} km`;
   $("#overviewMissionEta").textContent = `${minutes.toFixed(1)} min`;
+  renderMissionProgress();
   const progress = hasRoute ? 100 : hasAnyPoint ? 45 : 0;
   $("#missionProgressBar").style.width = `${progress}%`;
 }
@@ -5190,6 +5312,70 @@ function rebuildWaypoints(items) {
     point.speed = Number(item.speed) || 8;
   });
   renderWaypoints();
+}
+
+function offsetMetersToLatLon(origin, northMeters, eastMeters) {
+  const originLat = Array.isArray(origin) ? Number(origin[0]) : Number(origin.lat);
+  const originLon = Array.isArray(origin) ? Number(origin[1]) : Number(origin.lng ?? origin.lon);
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLon = Math.max(1, 111320 * Math.cos(originLat * Math.PI / 180));
+  return {
+    lat: originLat + northMeters / metersPerDegreeLat,
+    lon: originLon + eastMeters / metersPerDegreeLon,
+  };
+}
+
+function missionTemplateOrigin() {
+  initializeMissionMap();
+  if (latestPosition) return { lat: latestPosition[0], lon: latestPosition[1] };
+  const center = missionMap?.getCenter?.();
+  return { lat: Number(center?.lat || 31.2304), lon: Number(center?.lng || 121.4737) };
+}
+
+function buildMissionTemplate(type) {
+  const origin = missionTemplateOrigin();
+  const fixedWing = [
+    { command: "TAKEOFF", north: 0, east: 0, altitude: 60, speed: 12, hold: 0 },
+    { command: "WAYPOINT", north: 320, east: 120, altitude: 90, speed: 15, hold: 0 },
+    { command: "WAYPOINT", north: 860, east: 420, altitude: 120, speed: 18, hold: 0 },
+    { command: "LOITER", north: 1120, east: -120, altitude: 120, speed: 16, hold: 20 },
+    { command: "WAYPOINT", north: 480, east: -380, altitude: 80, speed: 14, hold: 0 },
+    { command: "LAND", north: 80, east: -80, altitude: 20, speed: 11, hold: 0 },
+  ];
+  const compoundVtol = [
+    { command: "TAKEOFF", north: 0, east: 0, altitude: 30, speed: 5, hold: 0 },
+    { command: "WAYPOINT", north: 160, east: 60, altitude: 60, speed: 8, hold: 0 },
+    { command: "WAYPOINT", north: 560, east: 260, altitude: 100, speed: 16, hold: 0 },
+    { command: "WAYPOINT", north: 820, east: -180, altitude: 100, speed: 16, hold: 0 },
+    { command: "WAYPOINT", north: 220, east: -120, altitude: 55, speed: 8, hold: 0 },
+    { command: "LAND", north: 20, east: 20, altitude: 15, speed: 4, hold: 0 },
+  ];
+  const profile = type === "compound_vtol" ? compoundVtol : fixedWing;
+  return profile.map((item) => {
+    const point = offsetMetersToLatLon(origin, item.north, item.east);
+    return {
+      command: item.command,
+      lat: point.lat,
+      lon: point.lon,
+      altitude: item.altitude,
+      hold: item.hold,
+      speed: item.speed,
+    };
+  });
+}
+
+function applyMissionTemplate(type) {
+  initializeMissionMap();
+  if (waypoints.length && !window.confirm("当前已有航点，是否用模板覆盖当前任务规划？")) return;
+  const label = type === "compound_vtol" ? "复合翼任务模板" : "固定翼任务模板";
+  rebuildWaypoints(buildMissionTemplate(type));
+  const first = waypoints[0];
+  if (first && missionMap) missionMap.setView([first.lat, first.lon], 15);
+  missionOverview.status = `${label}已生成`;
+  updateMissionOverview();
+  $("#missionValidation").classList.remove("valid");
+  $("#missionValidation").textContent = `${label}已生成：请根据真实场地调整航点，再执行上传前检查。`;
+  showToast(label, `${waypoints.length} 个航点已载入任务规划器`);
 }
 
 $("#saveMission").addEventListener("click", async () => {
@@ -5235,6 +5421,30 @@ function flightMissionItemsToWaypoints(items) {
   });
   return result;
 }
+
+function extractMissionItemsFromCommandStatus(status = {}) {
+  const results = Array.isArray(status.results) ? status.results : [];
+  for (const result of results) {
+    if (Array.isArray(result?.verification?.items)) return result.verification.items;
+    if (Array.isArray(result?.readback?.items)) return result.readback.items;
+    if (Array.isArray(result?.items)) return result.items;
+  }
+  return [];
+}
+
+function applyFlightMissionReadback(status, sourceLabel = "飞控 Mission") {
+  const missionItems = extractMissionItemsFromCommandStatus(status);
+  const parsed = flightMissionItemsToWaypoints(missionItems);
+  if (!parsed.length) {
+    return { applied: false, missionItems, parsed };
+  }
+  initializeMissionMap();
+  rebuildWaypoints(parsed);
+  missionOverview.status = `已同步${sourceLabel}`;
+  updateMissionOverview();
+  return { applied: true, missionItems, parsed };
+}
+
 $("#readFlightMission")?.addEventListener("click", async () => {
   try {
     $("#missionValidation").textContent = "正在读取飞控 Mission...";
@@ -5243,22 +5453,20 @@ $("#readFlightMission")?.addEventListener("click", async () => {
       $("#missionValidation").textContent = response.reason;
       return showToast("读取飞控任务失败", response.reason);
     }
+    trackCommandEvidence(response.commandId, "读取飞控 Mission");
     const status = await waitForConnectorCommand(response.commandId, (item) => {
       $("#missionValidation").textContent = item.message || "正在读取飞控 Mission...";
     }, { attempts: 45, delayMs: 500 });
-    const missionItems = status?.results?.[0]?.items || [];
-    const parsed = flightMissionItemsToWaypoints(missionItems);
-    if (!parsed.length) {
+    const readback = applyFlightMissionReadback(status, "飞控任务");
+    if (!readback.applied) {
       $("#missionValidation").textContent = status?.message || "飞控任务为空或未读到可显示航点";
       return showToast("飞控任务为空", $("#missionValidation").textContent);
     }
-    initializeMissionMap();
-    rebuildWaypoints(parsed);
     missionOverview.status = "已读取飞控任务";
     updateMissionOverview();
-    $("#missionValidation").textContent = `已读取飞控 Mission：${missionItems.length} 条任务项，${parsed.length} 个航点`;
+    $("#missionValidation").textContent = `已读取飞控 Mission：${readback.missionItems.length} 条任务项，${readback.parsed.length} 个航点`;
     $("#missionValidation").classList.add("valid");
-    showToast("飞控任务读取完成", `${parsed.length} 个航点已载入任务规划器`);
+    showToast("飞控任务读取完成", `${readback.parsed.length} 个航点已载入任务规划器`);
   } catch (error) {
     $("#missionValidation").textContent = error.message;
     showToast("读取飞控任务失败", error.message);
@@ -5273,6 +5481,7 @@ $("#clearFlightMission")?.addEventListener("click", async () => {
       $("#missionValidation").textContent = response.reason;
       return showToast("清空飞控任务失败", response.reason);
     }
+    trackCommandEvidence(response.commandId, "清空飞控 Mission");
     const status = await waitForConnectorCommand(response.commandId, null, { attempts: 30, delayMs: 500 });
     if (status?.status === "accepted") {
       $("#missionValidation").textContent = status.message || "飞控 Mission 已清空";
@@ -5312,6 +5521,8 @@ $("#addRtlPoint").addEventListener("click", () => {
   if (!point) return showToast("无法添加返航", "请先添加航点或收到 GPS 定位");
   addWaypoint(point.lat, point.lon, "RTL");
 });
+$("#applyFixedWingTemplate")?.addEventListener("click", () => applyMissionTemplate("fixed_wing"));
+$("#applyVtolTemplate")?.addEventListener("click", () => applyMissionTemplate("compound_vtol"));
 $("#importMissionFile").addEventListener("change", async () => {
   const file = $("#importMissionFile").files[0];
   if (!file) return;
@@ -5351,19 +5562,25 @@ $("#uploadMission").addEventListener("click", async () => {
       return showToast("任务上传被阻止", response.reason);
     }
     showToast("Mission 上传已开始", "正在等待飞控请求航点...");
+    trackCommandEvidence(response.commandId, "上传 Mission 到飞控");
     const status = await waitForConnectorCommand(response.commandId, (item) => {
       const result = item.results?.[0] || {};
       const progress = result.progress !== undefined ? ` · ${result.progress}%` : "";
       $("#missionValidation").textContent = `${item.message || "正在上传 Mission"}${progress}`;
     }, { attempts: 90, delayMs: 700 });
+    const readback = applyFlightMissionReadback(status, "飞控回读任务");
     if (status?.status === "accepted") {
       missionOverview.status = "飞控任务已上传";
-      $("#missionValidation").textContent = status.message || "Mission 上传完成";
+      $("#missionValidation").textContent = readback.applied
+        ? `Mission 上传完成并自动回读校验：飞控保存 ${readback.missionItems.length} 条任务项，已同步 ${readback.parsed.length} 个航点`
+        : (status.message || "Mission 上传完成，未读到可显示的回读航点");
       $("#missionValidation").classList.add("valid");
-      showToast("Mission 上传完成", status.message || "飞控已确认任务");
+      showToast("Mission 上传完成", readback.applied ? "飞控回读校验已同步到规划器" : (status.message || "飞控已确认任务"));
     } else if (status?.status === "partial") {
       missionOverview.status = "已上传待校验";
-      $("#missionValidation").textContent = status.message || "飞控已接受 Mission，但回读校验未通过，请点击读取飞控任务确认";
+      $("#missionValidation").textContent = readback.applied
+        ? `飞控已接受 Mission，但自动回读校验存在差异；已显示飞控实际保存的 ${readback.parsed.length} 个航点`
+        : (status.message || "飞控已接受 Mission，但回读校验未通过，请点击读取飞控任务确认");
       $("#missionValidation").classList.remove("valid");
       showToast("Mission 已上传待校验", $("#missionValidation").textContent);
     } else {

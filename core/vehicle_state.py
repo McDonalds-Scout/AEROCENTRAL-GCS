@@ -68,6 +68,8 @@ class VehicleState:
     home_position: dict[str, float] | None = None
     parameters: dict[str, float] = field(default_factory=dict)
     mission_items: list[dict[str, Any]] = field(default_factory=list)
+    mission_current: dict[str, Any] = field(default_factory=dict)
+    mission_reached: dict[str, Any] = field(default_factory=dict)
     system_status: int | None = None
     landed_state: int | None = None
     last_message: str | None = None
@@ -132,6 +134,8 @@ class VehicleState:
             "calibration": "calibration",
             "systemStatus": "system_status",
             "landedState": "landed_state",
+            "missionCurrent": "mission_current",
+            "missionReached": "mission_reached",
             "lastMessage": "last_message",
             "homeLat": "home_position",
         }
@@ -206,6 +210,8 @@ class VehicleState:
                 "calibration": self.calibration,
                 "systemStatus": self.system_status,
                 "landedState": self.landed_state,
+                "missionCurrent": self.mission_current,
+                "missionReached": self.mission_reached,
                 "lastMessage": self.last_message,
             }
         )

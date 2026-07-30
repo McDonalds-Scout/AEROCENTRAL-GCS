@@ -67,6 +67,12 @@ MESSAGE_INTERVALS = {
     mavutil.mavlink.MAVLINK_MSG_ID_RC_CHANNELS: 50_000,
     mavutil.mavlink.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW: 50_000,
 }
+for _mission_message_id, _mission_interval_us in (
+    (getattr(mavutil.mavlink, "MAVLINK_MSG_ID_MISSION_CURRENT", None), 500_000),
+    (getattr(mavutil.mavlink, "MAVLINK_MSG_ID_MISSION_ITEM_REACHED", None), 0),
+):
+    if _mission_message_id is not None:
+        MESSAGE_INTERVALS[_mission_message_id] = _mission_interval_us
 
 UI_PUBLISH_HZ = 50.0
 COMMAND_SCAN_INTERVAL_S = 0.1
@@ -137,6 +143,8 @@ REALTIME_UI_KEYS = (
     "statustexts",
     "commandAcks",
     "calibration",
+    "missionCurrent",
+    "missionReached",
     "lastMessage",
 )
 FULL_UI_KEYS = ("parameters", "mission_items")
@@ -2236,6 +2244,8 @@ def create_state(vehicle_id):
         "calibration": {},
         "parameters": {},
         "mission_items": [],
+        "missionCurrent": {},
+        "missionReached": {},
         "lastMessage": None,
     }
 
@@ -2436,6 +2446,19 @@ def update_state(state, message):
             if existing.get("seq") != item.get("seq")
         ] + [item]
         state["mission_items"].sort(key=lambda value: value.get("seq", 0))
+    elif message_type == "MISSION_CURRENT":
+        state["missionCurrent"] = {
+            "seq": int(getattr(message, "seq", -1)),
+            "total": int(getattr(message, "total", 0) or 0) if hasattr(message, "total") else None,
+            "mission_state": int(getattr(message, "mission_state", -1)) if hasattr(message, "mission_state") else None,
+            "mission_mode": int(getattr(message, "mission_mode", -1)) if hasattr(message, "mission_mode") else None,
+            "timeMs": int(time.time() * 1000),
+        }
+    elif message_type == "MISSION_ITEM_REACHED":
+        state["missionReached"] = {
+            "seq": int(getattr(message, "seq", -1)),
+            "timeMs": int(time.time() * 1000),
+        }
     else:
         return False
     return True

@@ -100,9 +100,24 @@
           <span><small>航点数量</small><strong id="overviewWaypointCount">0 个</strong></span>
           <span><small>航线距离</small><strong id="overviewMissionDistance">0.00 km</strong></span>
           <span><small>预计时间</small><strong id="overviewMissionEta">0.0 min</strong></span>
+          <span><small>飞控进度</small><strong id="overviewMissionCurrent">未执行</strong></span>
           <div class="progress-track"><i id="missionProgressBar"></i></div>
         </div>
         <button class="ghost-button" id="missionControl">规划航线</button>
+      </section>
+
+      <section class="command-evidence-panel" id="commandEvidencePanel">
+        <div>
+          <p class="eyebrow">COMMAND LOOP</p>
+          <h3 id="commandEvidenceTitle">实机命令闭环</h3>
+          <p id="commandEvidenceMessage">等待人工触发的 MAVLink 命令。</p>
+        </div>
+        <div class="command-evidence-grid">
+          <span><small>命令状态</small><strong id="commandEvidenceStatus">--</strong></span>
+          <span><small>COMMAND_ACK</small><strong id="commandEvidenceAck">--</strong></span>
+          <span><small>PX4 STATUSTEXT</small><strong id="commandEvidenceText">--</strong></span>
+          <span><small>更新时间</small><strong id="commandEvidenceTime">--</strong></span>
+        </div>
       </section>
 
       <section class="metrics-grid" aria-label="实时飞行数据">
@@ -657,6 +672,8 @@
               <button class="ghost-button" id="addTakeoffPoint">添加起飞点</button>
               <button class="ghost-button" id="addLandPoint">添加降落点</button>
               <button class="ghost-button" id="addRtlPoint">添加返航</button>
+              <button class="ghost-button" id="applyFixedWingTemplate">固定翼模板</button>
+              <button class="ghost-button" id="applyVtolTemplate">复合翼模板</button>
               <label class="route-import">导入 JSON<input id="importMissionFile" type="file" accept=".json"></label>
               <span id="routeEstimate">距离 -- km · 预计 -- min</span>
             </div>
@@ -674,6 +691,11 @@
               <button class="ghost-button danger-button" id="clearFlightMission">清空飞控任务</button>
               <button class="primary-button" id="checkMission">上传前检查</button>
               <button class="primary-button" id="uploadMission" disabled>上传任务到飞控</button>
+            </div>
+            <div class="mission-flight-progress" id="missionFlightProgress">
+              <span><small>当前航点</small><strong id="missionCurrentSeq">--</strong></span>
+              <span><small>最近到达</small><strong id="missionReachedSeq">--</strong></span>
+              <span><small>飞控任务状态</small><strong id="missionCurrentState">等待 MISSION_CURRENT</strong></span>
             </div>
             <p class="validation-message" id="missionValidation">尚未执行安全检查</p>
           </article>
@@ -807,7 +829,8 @@
   </div>
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="ui_modules/connection_diagnostics.js?v=gcs-68"></script>
-  <script src="app.js?v=gcs-69"></script>
+  <script src="ui_modules/realtime_instruments.js?v=gcs-70"></script>
+  <script src="app.js?v=gcs-70"></script>
 </body>
 </html>
 

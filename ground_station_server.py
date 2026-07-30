@@ -565,6 +565,8 @@ def telemetry_payload():
 LIVE_TELEMETRY_OMIT_KEYS = {
     "parameters",
     "mission_items",
+    "mission_current",
+    "mission_reached",
     "vehicle_id",
     "flight_mode",
     "roll_deg",
