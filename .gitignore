@@ -1,0 +1,67 @@
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+
+# Python cache / virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Node / frontend cache
+node_modules/
+.vite/
+dist/
+build/
+
+# Android wrapper local build dependencies
+android-web-browser-app/android-apk/.build-tools/
+android-web-browser-app/**/.gradle/
+android-web-browser-app/**/build/
+
+# Runtime logs and process state
+*.log
+*.out.log
+*.err.log
+connection.log
+connection.pids
+server*.log
+tmp-*.log
+data/token_usage.json
+
+# MAVLink command runtime state
+commands/*.jsonl
+commands/*status*.json
+commands/*.tmp
+
+# Flight logs and generated session data
+logs/
+logs_test/
+logs_test2/
+logs_test3/
+downloads/
+uploads/
+*.ulg
+*.ulg.part
+
+# Generated reports / presentation / document outputs
+reports/
+reports_test/
+outputs/
+
+# Local scans / temporary artifacts
+C_Drive_Scan_Reports/
+*.tmp
+*.bak
+
+# OS / editor files
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/

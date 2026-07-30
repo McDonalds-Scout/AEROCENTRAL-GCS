@@ -1,0 +1,5 @@
+{
+  "aircraft_type": "fixed_wing",
+  "source": "project_config",
+  "note": "Project default for engineering ULG reports. Report API options can override this value."
+}

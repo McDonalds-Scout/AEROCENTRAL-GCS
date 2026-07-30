@@ -1,0 +1,26 @@
+{
+  "gpt-5.5": {
+    "input_per_1m": 5.0,
+    "output_per_1m": 30.0
+  },
+  "gpt-5.4": {
+    "input_per_1m": 2.5,
+    "output_per_1m": 15.0
+  },
+  "gpt-5.4-mini": {
+    "input_per_1m": 0.75,
+    "output_per_1m": 4.5
+  },
+  "gpt-5.4-nano": {
+    "input_per_1m": 0.2,
+    "output_per_1m": 1.25
+  },
+  "deepseek-v4-flash": {
+    "input_per_1m": 0.14,
+    "output_per_1m": 0.28
+  },
+  "deepseek-v4-pro": {
+    "input_per_1m": 0.55,
+    "output_per_1m": 2.19
+  }
+}

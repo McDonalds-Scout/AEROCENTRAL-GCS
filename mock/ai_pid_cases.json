@@ -1,0 +1,58 @@
+[
+  {
+    "id": "roll_oscillation_mc",
+    "label": "多旋翼横滚振荡示例",
+    "axis": "roll",
+    "symptom": "oscillation",
+    "features": {
+      "source": "mock_roll_oscillation",
+      "duration_s": 95.0,
+      "axes": {
+        "roll": {
+          "actual_stats": {"mean": 0.4, "std": 7.8, "min": -18.0, "max": 20.0, "span": 38.0},
+          "setpoint_available": true,
+          "error_rms": 6.4,
+          "error_peak": 21.0,
+          "oscillation_detected": true,
+          "oscillation_frequency_hz": 1.8,
+          "zero_crossings": 46
+        }
+      },
+      "servo_output_saturation_percent": 2.1,
+      "motor_output_saturation_percent": 4.0,
+      "battery_voltage_min": 11.7,
+      "gps_satellite_min": 14,
+      "vibration_level": 1.2,
+      "parameters": {"MC_ROLLRATE_P": 0.15, "MC_ROLLRATE_I": 0.20, "MC_ROLLRATE_D": 0.003},
+      "missing": []
+    }
+  },
+  {
+    "id": "pitch_sluggish_fw",
+    "label": "固定翼俯仰响应慢示例",
+    "axis": "pitch",
+    "symptom": "sluggish",
+    "features": {
+      "source": "mock_pitch_sluggish_fw",
+      "duration_s": 180.0,
+      "axes": {
+        "pitch": {
+          "actual_stats": {"mean": 2.1, "std": 3.2, "min": -8.0, "max": 14.0, "span": 22.0},
+          "setpoint_available": true,
+          "error_rms": 5.8,
+          "error_peak": 16.5,
+          "oscillation_detected": false,
+          "oscillation_frequency_hz": 0.2,
+          "zero_crossings": 8
+        }
+      },
+      "servo_output_saturation_percent": 1.5,
+      "motor_output_saturation_percent": 0.0,
+      "battery_voltage_min": 22.4,
+      "gps_satellite_min": 16,
+      "vibration_level": 0.9,
+      "parameters": {"FW_PR_P": 0.05, "FW_PR_I": 0.05, "FW_PR_D": 0.001},
+      "missing": []
+    }
+  }
+]

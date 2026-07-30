@@ -1,0 +1,813 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1014">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>壹通无人机系统有限公司 · 无人机任务控制中心</title>
+  <link rel="icon" type="image/png" href="assets/yitong-logo.png">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="styles.css?v=gcs-69">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <a class="brand" id="brandHome" href="#" aria-label="壹通无人机系统有限公司任务控制中心">
+        <span class="brand-mark"><img src="assets/yitong-logo.png" alt="壹通无人机系统有限公司 Logo"></span>
+        <span class="brand-copy"><strong>壹通无人机系统有限公司</strong><small>YITONG UAV SYSTEMS</small></span>
+      </a>
+
+      <nav class="nav-list">
+        <button class="nav-item active" data-page="overview" title="总览">
+          <span class="icon">⌁</span><span>任务总览</span>
+        </button>
+        <button class="nav-item" data-page="history" title="记录">
+          <span class="icon">◴</span><span>飞行记录</span>
+        </button>
+        <button class="nav-item" data-page="tuning" title="调参与测试">
+          <span class="icon">≋</span><span>调参与测试</span>
+        </button>
+        <button class="nav-item" data-page="mission" title="任务规划">
+          <span class="icon">⌖</span><span>任务规划</span>
+        </button>
+        <button class="nav-item" data-page="risk" title="风险评分">
+          <span class="icon">◇</span><span>风险评分</span>
+        </button>
+        <button class="nav-item" data-page="feasibility" title="任务预测">
+          <span class="icon">↗</span><span>任务预测</span>
+        </button>
+        <button class="nav-item" data-page="geofence" title="电子围栏">
+          <span class="icon">□</span><span>电子围栏</span>
+        </button>
+        <button class="nav-item" data-page="logCompare" title="日志对比">
+          <span class="icon">≋</span><span>日志对比</span>
+        </button>
+        <button class="nav-item" data-page="flightLog" title="飞控日志下载">
+          <span class="icon">⇩</span><span>飞控日志</span>
+        </button>
+        <button class="nav-item" data-page="sensorHealth" title="传感器健康">
+          <span class="icon">◎</span><span>传感器健康</span>
+        </button>
+        <button class="nav-item" data-page="connection" title="连接设置">
+          <span class="icon">⌁</span><span>连接设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="link-state">
+          <span class="signal-bars"><i></i><i></i><i></i><i></i></span>
+          <span><small>数据链路</small><strong id="linkFreshness">等待遥测</strong></span>
+        </div>
+        <button class="nav-item" id="settingsButton" title="系统设置"><span class="icon">⚙</span><span>系统设置</span></button>
+        <div class="operator">
+          <span class="avatar" id="operatorAvatar">指</span>
+          <span><strong id="operatorName">指挥员</strong><small>任务指挥员</small></span>
+          <button class="icon-button" id="accountButton" title="账户菜单">⋮</button>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">FLIGHT OPERATIONS</p>
+          <h1>无人机任务控制中心</h1>
+        </div>
+        <div class="topbar-actions">
+          <div class="weather"><span>☀</span><span><strong>23°C</strong><small>东南风 2.4 m/s</small></span></div>
+          <span class="divider"></span>
+          <time id="clock">--:--:--</time>
+          <button class="icon-button notification-button" id="notificationButton" title="通知">♢<span></span></button>
+          <button class="primary-button" id="newMission"><span>＋</span> 新建任务</button>
+        </div>
+      </header>
+
+      <div class="page-view active" id="overviewPage">
+      <section class="mission-strip">
+        <div class="mission-title">
+          <span class="live-dot"></span>
+          <div>
+            <span class="status-label">任务待规划</span>
+            <h2 id="currentMissionTitle">自定义任务 · 待规划区域</h2>
+          </div>
+        </div>
+        <div class="mission-meta">
+          <span><small>任务编号</small><strong id="missionId">未创建</strong></span>
+          <span><small>执行机组</small><strong id="missionFleet">UAV-03</strong></span>
+          <span><small>航点数量</small><strong id="overviewWaypointCount">0 个</strong></span>
+          <span><small>航线距离</small><strong id="overviewMissionDistance">0.00 km</strong></span>
+          <span><small>预计时间</small><strong id="overviewMissionEta">0.0 min</strong></span>
+          <div class="progress-track"><i id="missionProgressBar"></i></div>
+        </div>
+        <button class="ghost-button" id="missionControl">规划航线</button>
+      </section>
+
+      <section class="metrics-grid" aria-label="实时飞行数据">
+        <article class="metric">
+          <div class="metric-heading"><span class="metric-icon cyan">↥</span><span>飞行高度</span><small>ALT</small></div>
+          <div class="metric-value"><strong id="altitude">--</strong><span>m</span></div>
+          <div class="metric-foot"><span class="trend neutral" id="altitudeState">等待高度</span><span id="altitudeDetail">真实遥测</span></div>
+        </article>
+        <article class="metric">
+          <div class="metric-heading"><span class="metric-icon blue">➤</span><span>地速</span><small>GS</small></div>
+          <div class="metric-value"><strong id="speed">--</strong><span>m/s</span></div>
+          <div class="metric-foot"><span class="trend neutral" id="speedState">等待地速</span><span id="speedDetail">真实遥测</span></div>
+        </article>
+        <article class="metric">
+          <div class="metric-heading"><span class="metric-icon teal">≈</span><span>空速</span><small>AS</small></div>
+          <div class="metric-value"><strong id="airspeed">--</strong><span>m/s</span></div>
+          <div class="metric-foot"><span class="trend neutral" id="airspeedState">等待空速管</span><span>VFR_HUD</span></div>
+        </article>
+        <article class="metric">
+          <div class="metric-heading"><span class="metric-icon green">ϟ</span><span>电池电量</span><small>BAT</small></div>
+          <div class="metric-value"><strong id="battery">--</strong><span>%</span></div>
+          <div class="metric-foot"><span class="trend neutral" id="batteryState">等待电池</span><span id="batteryDetail">真实遥测</span></div>
+        </article>
+        <article class="metric">
+          <div class="metric-heading"><span class="metric-icon amber">⌖</span><span>卫星定位</span><small>GNSS</small></div>
+          <div class="metric-value"><strong id="satellites">--</strong><span>颗</span></div>
+          <div class="metric-foot"><span class="trend neutral" id="gpsState">等待 GPS</span><span id="gpsDetail">真实遥测</span></div>
+        </article>
+        <article class="metric">
+          <div class="metric-heading"><span class="metric-icon violet">◉</span><span>链路信号</span><small>LINK</small></div>
+          <div class="metric-value"><strong id="signal">--</strong><span>%</span></div>
+          <div class="metric-foot"><span class="trend neutral" id="signalState">等待链路</span><span id="signalDetail">MAVLink</span></div>
+        </article>
+      </section>
+
+      <section class="flight-hud" aria-label="飞行姿态 HUD">
+        <article class="hud-attitude">
+          <div class="hud-top">
+            <span id="hudStatus">等待 MAVLink</span>
+            <strong id="hudMode">UNKNOWN</strong>
+            <span class="locked" id="hudArmed">未解锁</span>
+          </div>
+          <div class="hud-horizon" aria-label="HUD 姿态仪">
+            <div class="hud-horizon-scene" id="hudAttitudeScene">
+              <div class="hud-sky"></div>
+              <div class="hud-ground"></div>
+              <div class="hud-horizon-line"></div>
+              <span class="hud-pitch-line up">+10</span>
+              <span class="hud-pitch-line zero">0</span>
+              <span class="hud-pitch-line down">-10</span>
+            </div>
+            <div class="hud-aircraft"><i></i><span></span><i></i></div>
+            <div class="hud-heading-band"><strong id="hudHeading">---°</strong><small id="hudHeadingCardinal">---</small></div>
+          </div>
+          <div class="hud-attitude-values">
+            <div><small>俯仰</small><strong id="hudPitch">--.-°</strong></div>
+            <div><small>横滚</small><strong id="hudRoll">--.-°</strong></div>
+            <div><small>航向</small><strong id="hudYaw">---.-°</strong></div>
+          </div>
+        </article>
+        <article class="hud-data">
+          <div><small>飞行高度</small><strong><span id="hudAltitude">--</span> m</strong></div>
+          <div><small>地速</small><strong><span id="hudGroundSpeed">--</span> m/s</strong></div>
+          <div><small>空速</small><strong><span id="hudAirspeed">--</span> m/s</strong><em id="hudAirspeedState">等待空速管</em></div>
+          <div><small>GPS</small><strong id="hudFix">未定位</strong></div>
+          <div><small>电池</small><strong><span id="hudBattery">--</span>%</strong></div>
+          <div><small>坐标</small><strong id="hudCoordinate">--</strong></div>
+        </article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel map-panel">
+          <div class="panel-header">
+            <div>
+              <h3>实时 GPS 任务地图</h3>
+              <p><span class="telemetry-state offline" id="telemetryState">等待 MAVLink</span> · <span id="coordinateText">尚未收到定位</span></p>
+            </div>
+            <div class="segmented" role="group" aria-label="地图模式">
+              <button class="active">卫星</button><button>地形</button><button>标准</button>
+            </div>
+          </div>
+          <div class="map-stage">
+            <div id="gpsMap" aria-label="无人机实时 GPS 地图"></div>
+            <div class="map-waiting" id="mapWaiting">
+              <span class="map-waiting-icon">⌖</span>
+              <strong>等待无人机定位</strong>
+              <small>连接数传并启动 MAVLink 桥接后自动定位</small>
+            </div>
+            <div class="map-tools">
+              <button data-map-action="zoom-in" title="放大">＋</button><button data-map-action="zoom-out" title="缩小">−</button><button data-map-action="locate" title="定位">⌖</button><button data-map-action="follow" title="自动跟随">◎</button><button data-map-action="clear-track" title="清除轨迹">×</button>
+            </div>
+            <div class="map-legend"><span><i class="uav03"></i>实时位置</span><span><i class="route"></i>实际航迹</span></div>
+            <div class="map-telemetry-overlay" id="mapTelemetryOverlay">
+              <div><small>纬度</small><strong id="mapLat">--</strong></div>
+              <div><small>经度</small><strong id="mapLon">--</strong></div>
+              <div><small>航向</small><strong id="mapHeading">---°</strong></div>
+              <div><small>高度</small><strong id="mapAltitude">-- m</strong></div>
+            </div>
+          </div>
+        </article>
+
+        <div class="workspace-side-stack">
+        <article class="panel alerts-panel">
+          <div class="panel-header">
+            <div><h3>实时告警</h3><p><span class="alert-count">0</span> 条待处理</p></div>
+            <button class="text-button" id="ackAll">全部确认</button>
+          </div>
+          <div class="alert-list">
+            <div class="alert-empty" id="alertEmpty">当前无告警</div>
+          </div>
+          <button class="full-link" id="viewAllAlerts">查看全部告警 <span>›</span></button>
+        </article>
+
+        <section class="flight-readiness-strip" id="flightReadinessStrip" aria-label="飞行模式切换">
+        <article class="flight-mode-panel" id="flightModePanel">
+          <div class="flight-mode-panel-head">
+            <div>
+              <p class="eyebrow">PX4 FLIGHT MODE</p>
+              <h3>飞行模式切换</h3>
+            </div>
+            <span id="flightModePanelState" class="mode-command-pill offline">等待连接</span>
+          </div>
+          <div class="flight-mode-current">
+            <small>当前模式</small>
+            <strong id="flightModePanelCurrent">UNKNOWN</strong>
+            <em id="flightModePanelArmed">未解锁</em>
+          </div>
+          <div class="flight-mode-buttons" id="flightModeButtons">
+            <button data-flight-mode="manual">手动</button>
+            <button data-flight-mode="position">位置</button>
+            <button data-flight-mode="altitude">定高</button>
+            <button data-flight-mode="land">降落</button>
+            <button data-flight-mode="mission">任务</button>
+          </div>
+          <em class="flight-mode-command-state" id="flightModeCommandState">等待 MAVLink 连接后才能切换飞行模式</em>
+          <p class="flight-mode-safety-note">模式命令通过 MAVLink 发送到飞控；降落模式会二次确认，飞控拒绝时会显示 COMMAND_ACK / STATUSTEXT。</p>
+        </article>
+        </section>
+        </div>
+      </section>
+
+      <section class="analysis-grid">
+        <article class="panel attitude-panel">
+          <div class="panel-header">
+            <div><h3>姿态仪</h3><p>俯仰 / 横滚 · PX6C ATTITUDE</p></div>
+            <span class="attitude-state offline" id="attitudeState">等待数据</span>
+          </div>
+          <div class="smooth-attitude" id="smoothAttitudeIndicator" aria-label="高性能姿态仪">
+            <div class="smooth-attitude-labels"><span>SKY</span><strong>ATTITUDE</strong><span>GROUND</span></div>
+            <div class="smooth-attitude-dial">
+              <div class="smooth-attitude-moving-layer" id="smoothAttitudeLayer">
+                <div class="smooth-attitude-sky"></div>
+                <div class="smooth-attitude-ground"></div>
+                <div class="smooth-horizon-line"></div>
+                <div class="smooth-pitch-ladder">
+                  <span style="--pitch:-20"><i></i><b>20</b></span>
+                  <span style="--pitch:-10"><i></i><b>10</b></span>
+                  <span class="zero" style="--pitch:0"><i></i></span>
+                  <span style="--pitch:10"><i></i><b>10</b></span>
+                  <span style="--pitch:20"><i></i><b>20</b></span>
+                </div>
+              </div>
+              <div class="smooth-roll-scale">
+                <i style="--angle:-60deg"></i><i style="--angle:-45deg"></i><i class="major" style="--angle:-30deg"></i>
+                <i style="--angle:-20deg"></i><i style="--angle:-10deg"></i><i class="major" style="--angle:0deg"></i>
+                <i style="--angle:10deg"></i><i style="--angle:20deg"></i><i class="major" style="--angle:30deg"></i>
+                <i style="--angle:45deg"></i><i style="--angle:60deg"></i>
+              </div>
+              <span class="smooth-roll-pointer"></span>
+              <div class="smooth-aircraft-reference"><i></i><span></span><i></i></div>
+              <div class="smooth-instrument-offline" id="smoothAttitudeOffline">姿态离线</div>
+            </div>
+            <div class="smooth-instrument-values">
+              <div><small>PITCH / 俯仰</small><strong id="pitchValue">--.-°</strong></div>
+              <div><small>ROLL / 横滚</small><strong id="rollValue">--.-°</strong></div>
+            </div>
+            <div class="smooth-instrument-debug" id="smoothAttitudeDebug">age -- · fps --</div>
+          </div>
+        </article>
+
+        <article class="panel compass-panel">
+          <div class="panel-header">
+            <div><h3>罗盘</h3><p>航向 / YAW · 独立指南显示</p></div>
+            <span class="attitude-state offline" id="compassState">等待数据</span>
+          </div>
+          <div class="smooth-compass" id="smoothCompass" aria-label="高性能罗盘">
+            <div class="smooth-compass-dial">
+              <div class="smooth-compass-rotating-layer" id="smoothCompassLayer">
+                <span class="compass-cardinal north">N</span>
+                <span class="compass-cardinal east">E</span>
+                <span class="compass-cardinal south">S</span>
+                <span class="compass-cardinal west">W</span>
+                <i class="major" style="--angle:0deg"></i><i style="--angle:10deg"></i><i style="--angle:20deg"></i>
+                <i class="major" style="--angle:30deg"></i><i style="--angle:40deg"></i><i style="--angle:50deg"></i>
+                <i class="major" style="--angle:60deg"></i><i style="--angle:70deg"></i><i style="--angle:80deg"></i>
+                <i class="major" style="--angle:90deg"></i><i style="--angle:100deg"></i><i style="--angle:110deg"></i>
+                <i class="major" style="--angle:120deg"></i><i style="--angle:130deg"></i><i style="--angle:140deg"></i>
+                <i class="major" style="--angle:150deg"></i><i style="--angle:160deg"></i><i style="--angle:170deg"></i>
+                <i class="major" style="--angle:180deg"></i><i style="--angle:190deg"></i><i style="--angle:200deg"></i>
+                <i class="major" style="--angle:210deg"></i><i style="--angle:220deg"></i><i style="--angle:230deg"></i>
+                <i class="major" style="--angle:240deg"></i><i style="--angle:250deg"></i><i style="--angle:260deg"></i>
+                <i class="major" style="--angle:270deg"></i><i style="--angle:280deg"></i><i style="--angle:290deg"></i>
+                <i class="major" style="--angle:300deg"></i><i style="--angle:310deg"></i><i style="--angle:320deg"></i>
+                <i class="major" style="--angle:330deg"></i><i style="--angle:340deg"></i><i style="--angle:350deg"></i>
+              </div>
+              <span class="smooth-compass-pointer"></span>
+              <div class="smooth-compass-center"><strong id="headingValue">---°</strong><small id="headingCardinal">---</small></div>
+              <div class="smooth-instrument-offline" id="smoothCompassOffline">罗盘离线</div>
+            </div>
+            <div class="smooth-instrument-debug" id="smoothCompassDebug">age -- · fps --</div>
+          </div>
+        </article>
+
+        <article class="panel chart-panel">
+          <div class="panel-header">
+            <div><h3>飞行参数趋势</h3><p>最近 30 分钟实时采样</p></div>
+            <div class="chart-actions">
+              <div class="legend"><span><i class="height"></i>高度</span><span><i class="speed"></i>速度</span></div>
+              <select id="rangeSelect" aria-label="时间范围"><option value="30">近 30 分钟</option><option value="15">近 15 分钟</option><option value="60">近 1 小时</option></select>
+            </div>
+          </div>
+          <div class="canvas-wrap"><canvas id="flightChart"></canvas></div>
+        </article>
+
+        <article class="panel systems-panel">
+          <div class="panel-header"><div><h3>机载系统</h3><p id="systemsSubtitle">等待真实遥测</p></div><span class="health-badge offline" id="systemsHealthBadge">未连接</span></div>
+          <div class="system-list">
+            <div><span><i id="systemFlightDot" class="warm"></i>飞控系统</span><strong id="systemFlightStatus">未连接</strong></div>
+            <div><span><i id="systemPowerDot" class="warm"></i>电源系统</span><strong id="systemPowerStatus">等待电池</strong></div>
+            <div><span><i id="systemGpsDot" class="warm"></i>GNSS / RTK</span><strong id="systemGpsStatus">未定位</strong></div>
+            <div><span><i id="systemActuatorDot" class="warm"></i>执行器输出</span><strong id="systemActuatorStatus">等待输出</strong></div>
+            <div><span><i id="systemLinkDot" class="warm"></i>MAVLink 链路</span><strong id="systemLinkStatus">无心跳</strong></div>
+          </div>
+          <div class="temperature">
+            <div><span>最后消息</span><strong id="systemLastMessage">--</strong></div>
+            <div class="temp-bar"><i></i><span></span></div>
+            <small id="systemDetail">机载系统状态只使用真实 MAVLink 遥测，不再使用默认正常值。</small>
+          </div>
+        </article>
+      </section>
+      </div>
+
+      <section class="page-view operational-page" id="connectionPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">CONNECTION MANAGER</p><h2>连接设置</h2><p>统一管理 PX6C / PX4 串口、WiFi UDP 与演示数据源</p></div>
+          <span class="mode-badge" id="currentModeBadge">演示模式</span>
+        </div>
+        <div class="ops-grid connection-layout">
+          <article class="panel form-panel">
+            <div class="panel-header"><div><h3>数据链路配置</h3><p>默认 UDP 监听 0.0.0.0:14550</p></div></div>
+            <div class="panel-body form-stack">
+              <label>连接方式
+                <select id="connectionType">
+                  <option value="demo">演示模式</option>
+                  <option value="serial">USB 串口连接</option>
+                  <option value="udp" selected>WiFi UDP 连接</option>
+                  <option value="udp_listen">UDP 监听模式</option>
+                </select>
+              </label>
+              <div class="form-row">
+                <label>串口号<select id="serialPort"><option value="">正在扫描...</option></select></label>
+                <label>波特率<select id="baudRate"><option>57600</option><option>115200</option><option>921600</option></select></label>
+              </div>
+              <div class="form-row udp-fields">
+                <label>UDP 监听地址<input id="listenAddress" value="0.0.0.0"></label>
+                <label>UDP 监听端口<input id="listenPort" type="number" value="19856"></label>
+              </div>
+              <div class="form-row udp-fields">
+                <label>目标飞控 IP<input id="targetIp" value="192.168.144.12"></label>
+                <label>目标飞控端口<input id="targetPort" type="number" value="19856"></label>
+              </div>
+              <div class="connection-help udp-fields" id="udpListenHint">WiFi UDP 连接使用目标飞控 IP/端口；UDP 监听模式使用本机监听地址/端口。</div>
+              <div class="udp-address-tools udp-fields">
+                <button class="ghost-button" id="useAnyUdpAddress" type="button">使用 0.0.0.0</button>
+                <button class="ghost-button" id="useDetectedUdpAddress" type="button">使用本机网卡 IP</button>
+                <span id="localIpList">正在读取本机 IP...</span>
+              </div>
+              <div class="button-row">
+                <button class="primary-button" id="connectButton">开始连接</button>
+                <button class="ghost-button" id="disconnectButton">断开连接</button>
+                <button class="icon-button" id="refreshPorts" title="刷新串口">↻</button>
+                <span class="inline-connection-state" id="inlineConnectionState">尚未连接</span>
+              </div>
+            </div>
+          </article>
+          <article class="panel status-panel">
+            <div class="panel-header"><div><h3>实时连接状态</h3><p id="connectionStatusText">未连接</p></div><span class="health-badge offline" id="heartbeatBadge">无心跳</span></div>
+            <div class="status-matrix">
+              <div><small>MAVLink Heartbeat</small><strong id="heartbeatStatus">等待</strong></div>
+              <div><small>接收频率</small><strong id="receiveRate">0 Hz</strong></div>
+              <div><small>最后数据</small><strong id="lastDataTime">--</strong></div>
+              <div><small>数据超时</small><strong id="packetAge">--</strong></div>
+              <div><small>横滚角</small><strong id="connectionRoll">--.-°</strong></div>
+              <div><small>俯仰角</small><strong id="connectionPitch">--.-°</strong></div>
+              <div><small>航向角</small><strong id="connectionYaw">---.-°</strong></div>
+            </div>
+            <div class="connection-notice" id="connectionNotice">连接真实飞控后自动进入实机只读模式</div>
+            <div class="connection-diagnostics warning" id="connectionDiagnostics">
+              <div><small>诊断阶段</small><strong>waiting</strong></div>
+              <div><small>链路端点</small><strong>--</strong></div>
+              <p>等待连接状态。</p>
+            </div>
+          </article>
+        </div>
+        <article class="panel preflight-panel">
+          <div class="panel-header">
+            <div><h3>飞前检查清单</h3><p>自动检查链路、GPS、电池、姿态、Home 点、任务航线与黑匣子记录</p></div>
+            <span class="recording-badge" id="preflightBadge">等待检查</span>
+          </div>
+          <div class="preflight-actions">
+            <button class="primary-button" id="runPreflight">执行飞前检查</button>
+            <button class="ghost-button" id="startBlackboxFromPreflight">开启黑匣子记录</button>
+            <strong id="preflightSummary">尚未执行检查</strong>
+          </div>
+          <div class="preflight-grid" id="preflightGrid"></div>
+        </article>
+        <article class="panel log-control-panel">
+          <div class="panel-header">
+            <div><h3>黑匣子式实时记录</h3><p>遥测、告警、事件、参数和任务航线同步保存，支持飞后回放</p></div>
+            <span class="recording-badge" id="recordingBadge">未记录</span>
+          </div>
+          <div class="log-controls">
+            <label>会话名称<input id="sessionName" value="flight"></label>
+            <div><small>日志文件夹</small><strong id="logFolder">logs</strong></div>
+            <div><small>已记录数据</small><strong id="logRows">0 条</strong></div>
+            <div><small>最后更新</small><strong id="logLastUpdate">--</strong></div>
+            <button class="primary-button" id="startLogging">开始记录</button>
+            <button class="ghost-button" id="stopLogging">停止记录</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="page-view operational-page" id="flightLogPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">PX4 ULOG DOWNLOAD</p><h2>飞控 .ulg 日志拷贝</h2><p>通过 MAVLink 从飞控 SD 卡读取日志列表，选择后下载到电脑本地，用于报告分析、PID 调参和飞行回放</p></div>
+          <span class="recording-badge" id="onboardLogModeBadge">等待飞控连接</span>
+        </div>
+        <article class="panel onboard-log-panel">
+          <div class="panel-header">
+            <div><h3>飞控 SD 卡日志</h3><p>先连接飞控并进入实机模式，再读取列表；下载完成后点击保存 .ulg</p></div>
+            <span class="health-badge" id="onboardLogLinkState">MAVLink</span>
+          </div>
+          <div class="usb-log-controls">
+            <div><small>USB 直连下载</small><strong id="usbLogStatus">插入飞控 USB 线后选择串口</strong></div>
+            <label>USB 串口<select id="usbLogPort"><option value="">正在扫描...</option></select></label>
+            <label>波特率<select id="usbLogBaud"><option>57600</option><option>115200</option><option>921600</option></select></label>
+            <button class="ghost-button" id="refreshUsbLogPorts">刷新串口</button>
+            <button class="primary-button" id="connectUsbForLogs">USB 连接并读取日志</button>
+          </div>
+          <div class="onboard-log-controls">
+            <div><small>拷贝状态</small><strong id="onboardLogStatus">尚未读取飞控日志</strong></div>
+            <label>飞控日志<select id="onboardLogSelect"><option value="">请先读取日志列表</option></select></label>
+            <button class="ghost-button" id="refreshOnboardLogs">读取飞控日志列表</button>
+            <button class="primary-button" id="downloadOnboardLog" disabled>下载 .ulg</button>
+            <a class="ghost-button report-download" id="downloadOnboardLogLink" href="#" hidden>保存 .ulg</a>
+          </div>
+          <div class="flight-log-note">
+            <span>保存位置</span>
+            <strong>C:\Users\19636\OneDrive\文档\MATLAB\task4\新建文件夹\downloads\ulg</strong>
+            <small>MAVLink 日志下载每包数据很小，几 MB 的 .ulg 可能需要几分钟；大日志建议使用 USB 直连，最快方式仍然是取出 SD 卡用读卡器拷贝。</small>
+            <small>如果列表为空，请确认飞控插有 SD 卡、PX4 日志记录已开启，并且当前连接不是单纯遥测只读转发。</small>
+          </div>
+        </article>
+      </section>
+
+      <section class="page-view operational-page" id="tuningPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">TUNING & TEST</p><h2>调参与测试</h2><p>所有指令默认禁用，危险操作必须通过安全管理器</p></div>
+          <div class="mode-switch">
+            <label>运行模式<select id="operationMode"><option value="demo">演示模式</option><option value="simulation">仿真模式</option><option value="real_readonly">实机只读模式</option><option value="real_command">实机指令模式</option></select></label>
+          </div>
+        </div>
+        <div class="safety-banner">首次连接真实无人机时，请使用实机只读模式。任何测试前请确保无人机处于安全环境。</div>
+        <article class="panel calibration-panel">
+          <div class="panel-header">
+            <div><h3>飞机校准</h3><p>陀螺仪、加速度计、磁罗盘、水平姿态、遥控器与电调校准</p></div>
+            <span class="health-badge offline" id="calibrationSafety">禁止</span>
+          </div>
+          <div class="calibration-grid">
+            <label>校准项目
+              <select id="calibrationType">
+                <option value="gyro">陀螺仪校准</option>
+                <option value="accelerometer">加速度计校准</option>
+                <option value="magnetometer">磁罗盘校准</option>
+                <option value="level">水平姿态校准</option>
+                <option value="airspeed">空速计校准</option>
+                <option value="radio">遥控器校准</option>
+                <option value="esc">电调校准</option>
+              </select>
+            </label>
+            <label>安全确认
+              <input id="calibrationConfirmation" placeholder="请输入：已确认安全">
+            </label>
+            <div class="calibration-state">
+              <small>状态</small>
+              <strong id="calibrationStatus">等待选择校准项目</strong>
+            </div>
+            <button class="primary-button" id="startCalibration">开始校准</button>
+          </div>
+          <div class="calibration-hint" id="calibrationHint">校准前请保持飞控未解锁，并按照 PX4 提示移动或放置飞机。</div>
+        </article>
+        <div class="ops-grid testing-layout">
+          <article class="panel">
+            <div class="panel-header"><div><h3>舵机测试</h3><p>默认禁用 · 每次操作写入事件日志</p></div><span class="health-badge offline" id="servoSafety">禁止</span></div>
+            <div class="panel-body">
+              <p class="servo-detection" id="servoDetection">正在检测舵机输出...</p>
+              <div class="servo-grid" id="servoGrid"></div>
+              <div class="mapping-repair-row">
+                <input id="servoMappingConfirmation" placeholder="修正映射请输入：确认写入参数">
+                <button class="ghost-button" id="repairServoMapping" disabled>修正舵机映射</button>
+              </div>
+              <div class="button-row"><button class="ghost-button" id="enableServoTest">启用舵机测试</button><button class="primary-button" id="sendServoTest" disabled>发送测试指令</button><button class="ghost-button" id="holdServoTest" disabled>保持当前输出</button><button class="emergency-button" id="stopServoHold" disabled>停止舵机保持</button><button class="ghost-button" id="centerServos" disabled>恢复中位</button></div>
+            </div>
+          </article>
+          <article class="panel danger-panel">
+            <div class="panel-header"><div><h3>电机测试安全框架</h3><p>输出上限 10% · 默认禁用</p></div><span class="danger-badge">危险操作</span></div>
+            <div class="panel-body">
+              <p class="danger-copy">危险：电机测试可能导致螺旋桨高速旋转。请确认已拆除螺旋桨。</p>
+              <label>安全确认<input id="propellerConfirmation" placeholder="请输入：已拆除螺旋桨"></label>
+              <p class="motor-detection" id="motorDetection">正在检测电机输出...</p>
+              <label>电机编号<select id="motorIndex"><option value="1">电机 1 · 等待飞控映射</option></select></label>
+              <label>测试油门 <div class="range-row"><input id="motorThrottle" type="range" min="0" max="10" value="0"><output id="motorThrottleValue">0%</output></div></label>
+              <div class="button-row"><button class="danger-button" id="motorTestButton" disabled>开始电机测试</button><button class="ghost-button" id="stopMotorHold" disabled>停止电机测试</button><button class="emergency-button" id="emergencyStop">紧急停止</button></div>
+            </div>
+          </article>
+        </div>
+        <article class="panel parameter-panel">
+          <div class="panel-header"><div><h3>PX4 参数与 PID 待写入队列</h3><p>参数不会立即写入，应用前必须逐项确认</p></div><button class="ghost-button" id="requestParameters">请求参数列表</button></div>
+          <div class="ai-pid-panel">
+            <div class="ai-pid-header">
+              <div><h4>AI PID 调参助手</h4><p>根据实时姿态数据生成保守 PID 建议，需人工确认后加入队列</p></div>
+              <span class="mode-badge" id="aiPidConfidence">等待分析</span>
+            </div>
+            <div class="ai-pid-controls">
+              <label>调参轴
+                <select id="aiPidAxis">
+                  <option value="roll">横滚 Roll</option>
+                  <option value="pitch">俯仰 Pitch</option>
+                  <option value="yaw">航向 Yaw</option>
+                  <option value="altitude">高度 Altitude</option>
+                </select>
+              </label>
+              <label>当前问题
+                <select id="aiPidSymptom">
+                  <option value="balanced">自动判断</option>
+                  <option value="sluggish">响应慢</option>
+                  <option value="oscillation">震荡</option>
+                  <option value="overshoot">超调</option>
+                  <option value="drift">漂移/稳态误差</option>
+                </select>
+              </label>
+              <label>调节强度
+                <input id="aiPidAggressiveness" type="range" min="1" max="5" value="2">
+              </label>
+              <label>AI 引擎
+                <select id="aiPidProvider">
+                  <option value="local">本地工程规则</option>
+                  <option value="openai">ChatGPT / OpenAI</option>
+                </select>
+              </label>
+              <button class="primary-button" id="runAiPid">AI 分析</button>
+              <label>Mock 示例<select id="aiPidMockCase"><option value="">加载中</option></select></label>
+              <button class="ghost-button" id="runAiPidMock">示例分析</button>
+              <label>ULG 日志
+                <input id="aiPidLogFile" type="file" accept=".ulg,.csv,.json,.txt">
+              </label>
+              <button class="ghost-button" id="runUlgPid">日志调参</button>
+              <button class="ghost-button" id="applyAiPid" disabled>填入参数表</button>
+              <button class="primary-button" id="safeApplyAiPid" disabled>安全写入队列</button>
+              <button class="ghost-button" id="showPidHistory">回滚历史</button>
+            </div>
+            <div class="ai-pid-result" id="aiPidResult">尚未分析。建议先连接飞控并采集一段姿态数据。</div>
+            <div class="ai-pid-safety" id="aiPidSafety">安全门等待 AI PID Advisor 输出。</div>
+          </div>
+          <div class="parameter-safe-panel">
+            <div><strong>参数修改安全面板</strong><small>只有实机指令模式允许写入；每次写入前必须输入确认文本并进入 PX6C 命令队列。</small></div>
+            <label>确认文本<input id="parameterConfirmation" placeholder="请输入：确认写入参数"></label>
+            <span id="parameterQueueSummary">0 个参数待写入</span>
+          </div>
+          <div class="parameter-toolbar"><input id="parameterSearch" placeholder="搜索参数，例如 MC_ROLLRATE_P"><button class="primary-button" id="applyParameters">应用参数</button></div>
+          <div class="parameter-table-wrap">
+            <table><thead><tr><th>参数名</th><th>当前值</th><th>新值</th><th>分组</th><th>状态</th><th>操作</th></tr></thead><tbody id="parameterTable"></tbody></table>
+          </div>
+        </article>
+        <article class="panel ulg-report-panel">
+          <div class="panel-header">
+            <div><h3>飞行日志分析报告</h3><p>支持 .ulg / .csv / .json / .txt，生成工程分析报告并导出 Word、PDF、Markdown、HTML</p></div>
+            <span class="recording-badge" id="ulgReportBadge">等待上传</span>
+          </div>
+          <div class="ulg-report-grid">
+            <label>飞行日志文件<input id="ulgReportFile" type="file" accept=".ulg,.csv,.json,.txt"></label>
+            <label>报告语言<select id="reportLanguage"><option value="zh">中文</option></select></label>
+            <label>详细程度<select id="reportDetailLevel"><option value="brief">简版</option><option value="standard">标准版</option><option value="engineering" selected>完整工程版</option></select></label>
+            <button class="primary-button" id="generateUlgReport">生成报告</button>
+            <div class="ulg-report-state"><small>报告状态</small><strong id="ulgReportStatus">尚未生成</strong></div>
+          </div>
+          <div class="report-option-grid">
+            <label><input type="checkbox" id="reportIncludeCharts" checked> 包含图表</label>
+            <label><input type="checkbox" id="reportIncludePid" checked> PID 分析</label>
+            <label><input type="checkbox" id="reportIncludeBattery" checked> 电池分析</label>
+            <label><input type="checkbox" id="reportIncludeGps" checked> GPS/位置分析</label>
+            <label><input type="checkbox" id="reportIncludeSensors" checked> 传感器健康</label>
+            <label><input type="checkbox" id="reportIncludeEvents" checked> 异常事件</label>
+            <label><input type="checkbox" id="reportIncludeRecommendations" checked> 下次建议</label>
+          </div>
+          <div class="report-file-info" id="reportFileInfo">尚未选择文件</div>
+          <div class="report-card-grid" id="reportCardGrid"></div>
+          <div class="report-actions">
+            <a class="ghost-button report-download" id="downloadUlgReport" href="#" hidden>导出 Word</a>
+            <a class="ghost-button report-download" id="downloadPdfReport" href="#" hidden>导出 PDF</a>
+            <a class="ghost-button report-download" id="downloadMarkdownReport" href="#" hidden>导出 Markdown</a>
+            <a class="ghost-button report-download" id="downloadHtmlReport" href="#" hidden>导出 HTML</a>
+            <button class="ghost-button" id="openReportFolder" disabled title="复制本次生成报告在电脑上的保存路径">复制报告路径</button>
+          </div>
+          <div class="report-chart-preview" id="reportChartPreview"></div>
+          <div class="report-preview" id="reportPreview">报告预览将在生成后显示。</div>
+          <div class="calibration-hint">报告只使用日志中实际存在的数据字段；缺失的 GPS、电池、姿态或位置数据会在报告中明确标注，不会虚构结论。</div>
+          <div class="ai-report-block">
+            <div class="panel-header">
+              <div><h3>AI 生成日志报告</h3><p>基于算法报告的 verified summary 调用 OpenAI 生成工程化文字报告，独立于上方算法报告</p></div>
+              <span class="recording-badge" id="aiReportBadge">AI 待命</span>
+            </div>
+            <div class="ai-report-grid">
+              <label>详细程度<select id="aiReportDetailLevel"><option value="short">短报告</option><option value="standard" selected>标准报告</option><option value="detailed">详细报告</option></select></label>
+              <label>阅读对象<select id="aiReportAudience"><option value="engineering" selected>工程复盘</option><option value="management">管理汇报</option><option value="test_review">试飞评审</option></select></label>
+              <label class="inline-check"><input type="checkbox" id="aiReportIncludePid" checked> 包含 PID 建议边界</label>
+              <button class="primary-button" id="generateAiReport">生成 AI 报告</button>
+              <div class="ulg-report-state"><small>AI 报告状态</small><strong id="aiReportStatus">尚未生成</strong></div>
+            </div>
+            <div class="calibration-hint" id="aiReportNotice">AI 报告基于算法分析结果生成，仅用于辅助分析，不能替代人工工程判断；AI 不直接控制飞控，不在飞行中自动修改 PID。</div>
+            <div class="report-card-grid ai-report-cards" id="aiReportCardGrid"></div>
+            <div class="report-actions">
+              <a class="ghost-button report-download" id="downloadAiReportDocx" href="#" hidden>导出 AI Word</a>
+              <a class="ghost-button report-download" id="downloadAiReportMarkdown" href="#" hidden>导出 AI Markdown</a>
+              <a class="ghost-button report-download" id="downloadAiReportHtml" href="#" hidden>导出 AI HTML</a>
+            </div>
+            <div class="report-preview ai-report-preview" id="aiReportPreview">AI 报告预览将在生成后显示。</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="page-view operational-page" id="missionPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">MISSION PLANNER</p><h2>任务规划</h2><p>点击地图添加航点，拖动调整位置，上传前执行安全检查</p></div>
+          <span class="mode-badge" id="missionCheckBadge">等待检查</span>
+        </div>
+        <div class="mission-planner-grid">
+          <article class="panel planner-map-panel">
+            <div class="panel-header"><div><h3>航点地图</h3><p>支持添加、拖动、删除和航线预览</p></div><button class="text-button" id="clearWaypoints">清空任务</button></div>
+            <div class="route-toolbar">
+              <button class="ghost-button" id="centerMissionOnUav">定位到飞机</button>
+              <button class="ghost-button" id="addTakeoffPoint">添加起飞点</button>
+              <button class="ghost-button" id="addLandPoint">添加降落点</button>
+              <button class="ghost-button" id="addRtlPoint">添加返航</button>
+              <label class="route-import">导入 JSON<input id="importMissionFile" type="file" accept=".json"></label>
+              <span id="routeEstimate">距离 -- km · 预计 -- min</span>
+            </div>
+            <div id="missionMap"></div>
+          </article>
+          <article class="panel waypoint-panel">
+            <div class="panel-header"><div><h3>航点表格</h3><p><span id="waypointCount">0</span> 个任务点</p></div></div>
+            <div class="waypoint-table-wrap">
+              <table><thead><tr><th>序号</th><th>指令类型</th><th>纬度</th><th>经度</th><th>高度</th><th>停留</th><th>速度</th><th>操作</th></tr></thead><tbody id="waypointTable"></tbody></table>
+            </div>
+            <div class="mission-actions">
+              <button class="ghost-button" id="saveMission">保存任务</button>
+              <button class="ghost-button" id="exportMission">导出 JSON</button>
+              <button class="ghost-button" id="readFlightMission">读取飞控任务</button>
+              <button class="ghost-button danger-button" id="clearFlightMission">清空飞控任务</button>
+              <button class="primary-button" id="checkMission">上传前检查</button>
+              <button class="primary-button" id="uploadMission" disabled>上传任务到飞控</button>
+            </div>
+            <p class="validation-message" id="missionValidation">尚未执行安全检查</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-view operational-page" id="riskPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">RISK RULES</p><h2>实时规则风险评分</h2><p>仅根据已收到的真实遥测和任务状态进行本地规则评估，数据不足时不打分</p></div>
+          <span class="mode-badge" id="riskBadge">等待数据</span>
+        </div>
+        <div class="risk-layout">
+          <article class="panel risk-score-panel">
+            <div class="risk-score-ring" id="riskScoreRing"><strong id="riskScore">--</strong><span>规则分</span></div>
+            <div class="risk-summary">
+              <h3 id="riskLevel">等待遥测</h3>
+              <p id="riskSummary">连接飞控并收到链路、GPS、电池或姿态数据后才开始评分。</p>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-header"><div><h3>扣分原因</h3><p>每一项都有数据依据</p></div></div>
+            <div class="risk-reason-list" id="riskReasonList"></div>
+          </article>
+        </div>
+        <div class="risk-card-grid" id="riskMetricGrid"></div>
+      </section>
+
+      <section class="page-view operational-page" id="feasibilityPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">MISSION FORECAST</p><h2>任务可行性预测</h2><p>基于当前航线、电池、速度和返航余量估算任务是否可执行</p></div>
+          <span class="mode-badge" id="feasibilityBadge">等待航线</span>
+        </div>
+        <div class="forecast-grid" id="forecastGrid"></div>
+        <article class="panel">
+          <div class="panel-header"><div><h3>预测结论</h3><p>航线变化后自动更新</p></div><button class="primary-button" id="refreshForecast">重新预测</button></div>
+          <div class="forecast-result" id="forecastResult">请先在“任务规划”中添加航点，或导入任务 JSON。</div>
+        </article>
+      </section>
+
+      <section class="page-view operational-page" id="geofencePage">
+        <div class="page-heading">
+          <div><p class="eyebrow">GEOFENCE GUARD</p><h2>电子围栏 / 禁飞区保护</h2><p>独立配置最大半径、最大高度和禁飞区，自动检查任务航点是否越界</p></div>
+          <span class="mode-badge" id="geofenceBadge">未检查</span>
+        </div>
+        <div class="geofence-layout">
+          <article class="panel planner-map-panel">
+            <div class="panel-header"><div><h3>围栏地图</h3><p>点击地图添加禁飞区中心点</p></div><button class="text-button" id="clearGeofences">清空围栏</button></div>
+            <div id="geofenceMap"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header"><div><h3>围栏参数</h3><p>任务检查不会自动上传飞控，需人工确认</p></div></div>
+            <div class="geofence-form">
+              <label>最大任务半径<input id="maxMissionRadius" type="number" value="800" min="50"> m</label>
+              <label>最大飞行高度<input id="maxMissionAltitude" type="number" value="120" min="10"> m</label>
+              <label>禁飞区半径<input id="noFlyRadius" type="number" value="120" min="20"> m</label>
+              <div class="button-row">
+                <button class="ghost-button" id="addNoFlyAtUav">以飞机位置添加禁飞区</button>
+                <button class="primary-button" id="checkGeofence">检查任务</button>
+              </div>
+            </div>
+            <div class="geofence-list" id="geofenceList"></div>
+            <div class="forecast-result" id="geofenceResult">尚未检查任务航线。</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-view operational-page" id="logComparePage">
+        <div class="page-heading">
+          <div><p class="eyebrow">LOG COMPARISON</p><h2>多日志对比分析</h2><p>上传 2 份以上 .ulg / .csv / .json / .txt 日志，对比飞行性能、GPS、电源、姿态误差和传感器趋势</p></div>
+          <span class="mode-badge" id="compareBadge">等待上传</span>
+        </div>
+        <article class="panel log-tool-panel">
+          <div class="panel-header">
+            <div><h3>对比数据源</h3><p>第一份日志会作为基准，其余日志自动计算相对变化</p></div>
+            <button class="primary-button" id="runLogCompare">开始对比</button>
+          </div>
+          <div class="log-upload-grid">
+            <label>飞行日志文件<input id="compareLogFiles" type="file" accept=".ulg,.csv,.json,.txt" multiple></label>
+            <div class="ulg-report-state"><small>已选择</small><strong id="compareFileInfo">尚未选择文件</strong></div>
+          </div>
+          <div class="report-card-grid" id="compareCardGrid"></div>
+          <div class="compare-table-wrap">
+            <table>
+              <thead><tr><th>日志</th><th>时长</th><th>最高速度</th><th>最高高度</th><th>姿态 RMS</th><th>Gyro std</th><th>最低卫星</th><th>最低电压</th><th>健康分</th><th>异常</th></tr></thead>
+              <tbody id="compareTable"></tbody>
+            </table>
+          </div>
+          <div class="compare-recommendations" id="compareRecommendations">上传多份日志后，这里会显示横向对比结论。</div>
+        </article>
+      </section>
+
+      <section class="page-view operational-page" id="sensorHealthPage">
+        <div class="page-heading">
+          <div><p class="eyebrow">SENSOR HEALTH</p><h2>传感器健康评分</h2><p>按 IMU 振动、GPS 导航、电源链路、姿态控制、执行器输出和日志完整性生成 0-100 分健康评估</p></div>
+          <span class="mode-badge" id="sensorHealthBadge">等待上传</span>
+        </div>
+        <article class="panel log-tool-panel">
+          <div class="panel-header">
+            <div><h3>健康评分输入</h3><p>支持单份或多份日志批量评分，缺少的 topic 会明确标记为保守结论</p></div>
+            <button class="primary-button" id="runSensorHealth">开始评分</button>
+          </div>
+          <div class="log-upload-grid">
+            <label>飞行日志文件<input id="sensorHealthFiles" type="file" accept=".ulg,.csv,.json,.txt" multiple></label>
+            <div class="ulg-report-state"><small>已选择</small><strong id="sensorHealthFileInfo">尚未选择文件</strong></div>
+          </div>
+          <div class="report-card-grid" id="sensorHealthSummary"></div>
+          <div class="sensor-health-list" id="sensorHealthList">上传日志后，这里会显示每份日志的健康评分和整改建议。</div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <aside class="utility-drawer" id="utilityDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div><p class="eyebrow" id="drawerEyebrow">SYSTEM</p><h3 id="drawerTitle">系统信息</h3></div>
+      <button class="icon-button" id="closeDrawer" title="关闭">×</button>
+    </div>
+    <div class="drawer-content" id="drawerContent"></div>
+  </aside>
+  <div class="drawer-shade" id="drawerShade" hidden></div>
+
+  <div class="toast" id="toast" role="status"><span>✓</span><p><strong>操作成功</strong><small>告警已确认</small></p></div>
+  <div class="modal-backdrop" id="missionModal" hidden>
+    <form class="modal" id="missionForm">
+      <div class="modal-header"><div><h3>新建飞行任务</h3><p>配置基础任务信息</p></div><button type="button" class="icon-button close-modal">×</button></div>
+      <label>任务名称<input id="missionNameInput" required value="自定义任务" placeholder="输入任务名称"></label>
+      <div class="form-row"><label>执行区域<select id="missionAreaInput"><option>待规划区域</option><option>A-01 区域</option><option>B-01 区域</option><option>C-01 区域</option></select></label><label>执行机组<select id="missionFleetInput"><option>UAV-03</option><option>UAV-08</option><option>UAV-03 / UAV-08</option></select></label></div>
+      <label>飞行高度<div class="range-row"><input id="altRange" type="range" min="30" max="300" value="130"><output id="altOutput">130 m</output></div></label>
+      <div class="modal-actions"><button type="button" class="ghost-button close-modal">取消</button><button class="primary-button">创建任务</button></div>
+    </form>
+  </div>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="ui_modules/connection_diagnostics.js?v=gcs-68"></script>
+  <script src="app.js?v=gcs-69"></script>
+</body>
+</html>
+

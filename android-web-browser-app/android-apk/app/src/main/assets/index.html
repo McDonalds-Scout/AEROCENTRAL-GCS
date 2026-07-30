@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <meta name="description" content="一个面向安卓手机浏览器的网页版浏览器 App 原型。">
+  <title>Nova Android Browser</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <button class="icon-button" id="backBtn" type="button" aria-label="后退" title="后退">‹</button>
+      <button class="icon-button" id="forwardBtn" type="button" aria-label="前进" title="前进">›</button>
+      <form class="address-form" id="addressForm">
+        <span class="security-dot" id="securityDot" aria-hidden="true"></span>
+        <input id="addressInput" autocomplete="url" inputmode="url" spellcheck="false" placeholder="搜索或输入网址">
+        <button class="go-button" type="submit" aria-label="访问" title="访问">↵</button>
+      </form>
+      <button class="icon-button" id="tabsBtn" type="button" aria-label="标签页" title="标签页"><span id="tabCount">1</span></button>
+      <button class="icon-button" id="menuBtn" type="button" aria-label="菜单" title="菜单">☰</button>
+    </header>
+
+    <main class="browser-stage">
+      <section class="home-page" id="homePage">
+        <div class="brand-row">
+          <div class="brand-mark">N</div>
+          <div>
+            <h1>Nova Browser</h1>
+            <p>为安卓网页运行环境设计的轻量浏览器界面。</p>
+          </div>
+        </div>
+
+        <form class="hero-search" id="heroSearch">
+          <input id="heroInput" autocomplete="url" inputmode="search" placeholder="搜索关键词或输入网址">
+          <button type="submit">搜索</button>
+        </form>
+
+        <div class="quick-grid" id="quickGrid" aria-label="快捷入口"></div>
+
+        <section class="panel-row">
+          <article class="panel">
+            <h2>最近访问</h2>
+            <div class="list" id="historyList"></div>
+          </article>
+          <article class="panel">
+            <h2>收藏夹</h2>
+            <div class="list" id="bookmarkList"></div>
+          </article>
+        </section>
+      </section>
+
+      <section class="web-view hidden" id="webView">
+        <div class="notice" id="frameNotice">
+          <strong>网页预览模式</strong>
+          <span>部分网站会禁止被嵌入显示，可使用右下角按钮在新窗口打开。</span>
+        </div>
+        <iframe id="pageFrame" title="网页内容预览" sandbox="allow-forms allow-popups allow-scripts allow-same-origin"></iframe>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="浏览器工具栏">
+      <button id="homeBtn" type="button">⌂<span>主页</span></button>
+      <button id="reloadBtn" type="button">↻<span>刷新</span></button>
+      <button id="bookmarkBtn" type="button">☆<span>收藏</span></button>
+      <button id="openExternalBtn" type="button">↗<span>打开</span></button>
+    </nav>
+
+    <aside class="sheet hidden" id="tabsSheet" aria-label="标签页抽屉">
+      <div class="sheet-header">
+        <h2>标签页</h2>
+        <button class="text-button" id="newTabBtn" type="button">新建</button>
+      </div>
+      <div class="tab-list" id="tabList"></div>
+    </aside>
+
+    <aside class="sheet hidden" id="menuSheet" aria-label="菜单抽屉">
+      <div class="sheet-header">
+        <h2>菜单</h2>
+        <button class="icon-button" id="closeMenuBtn" type="button" aria-label="关闭">×</button>
+      </div>
+      <button class="menu-item" id="copyLinkBtn" type="button">复制当前链接</button>
+      <button class="menu-item" id="clearHistoryBtn" type="button">清空历史记录</button>
+      <button class="menu-item" id="installHintBtn" type="button">安装到安卓桌面</button>
+      <p class="menu-note" id="installHint">在 Chrome 或 Edge 中打开后，选择浏览器菜单里的“添加到主屏幕”。</p>
+    </aside>
+
+    <div class="scrim hidden" id="scrim"></div>
+    <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
