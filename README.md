@@ -7,6 +7,7 @@ Modular PX4 MAVLink Ground Control Station
 AeroCentral is a local web-based UAV Ground Control Station built around PX4 and MAVLink. It focuses on real-time telemetry, command acknowledgement, mission workflows, parameter safety, sensor calibration, actuator testing, flight-log handling, and engineering-oriented flight analysis.
 
 The project is designed as an engineering prototype and portfolio project. It is not a replacement for certified flight operations software. Any real aircraft operation must be validated with the target flight controller, a safe test environment, propellers removed for ground tests, and an independent reference tool such as QGroundControl.
+<img width="2533" height="1442" alt="image" src="https://github.com/user-attachments/assets/6cc649ed-ec00-40f6-a6dd-4f30485a4a08" />
 
 ## Features
 
@@ -20,6 +21,9 @@ The project is designed as an engineering prototype and portfolio project. It is
 - Flight log analysis and algorithm-generated engineering reports
 - AI-assisted flight analysis and PID advisory when a private API key is configured
 - Communication diagnostics for message flow, link status, and backend health
+<img width="2524" height="1427" alt="image" src="https://github.com/user-attachments/assets/1584df93-0c33-4534-b919-04cf60d11a55" />
+<img width="2559" height="1416" alt="image" src="https://github.com/user-attachments/assets/4a4e6ec4-9c12-45a0-9af1-f9ad309386ef" />
+<img width="2526" height="1437" alt="image" src="https://github.com/user-attachments/assets/68ee0ef7-99e3-446b-9634-beaba6529fad" />
 
 ## System Architecture
 
