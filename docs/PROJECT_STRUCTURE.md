@@ -1,96 +1,178 @@
-# 项目结构说明
+# Getting Started
 
-本项目采用“本地 Web UI + Python 后端 + MAVLink 连接进程 + 服务模块”的结构。前端负责显示和交互，后端负责 API、日志、报告、AI、飞控连接和安全控制。
+This guide helps a new developer or reviewer clone the project, start the Ground Control Station, and understand the first validation steps.
 
-## 顶层文件
+## 1. Environment Requirements
 
-| 文件 | 作用 |
-|---|---|
-| `index.html` | 前端页面结构，包含主界面、连接设置、任务规划、报告、调参等页面入口 |
-| `app.js` | 前端主逻辑，负责页面切换、接口请求、地图、姿态仪、罗盘、HUD、告警和实时数据渲染 |
-| `styles.css` | 前端视觉样式，包含深色主题、面板布局、仪表、地图和按钮样式 |
-| `ground_station_server.py` | 主后端入口，提供静态页面、`/api/` 接口、SSE 推送、连接进程管理 |
-| `px6c_connector.py` | MAVLink 连接主程序，负责 USB / UDP、消息解析、命令发送、任务上传和飞控 target 识别 |
-| `requirements.txt` | Python 依赖 |
-| `start-ui.cmd` / `start-ui.ps1` | 推荐启动入口 |
-| `cleanup-ui.ps1` | 清理旧后台和端口占用 |
-| `ensure-dependencies.ps1` / `ensure_dependencies.py` | 自动检查和安装 Python 依赖 |
+Recommended environment:
 
-## 主要目录
+| Item | Requirement |
+| --- | --- |
+| Operating system | Windows 10 / Windows 11 |
+| Python | 3.10 or later; 3.11 or 3.12 recommended |
+| Git | Required for clone, pull, commit, and push workflows |
+| Browser | Chrome or Edge for Web development mode |
+| Real-aircraft testing | PX4 / Pixhawk / PX6C compatible flight controller with USB or UDP MAVLink |
 
-| 目录 | 作用 | 是否进入 GitHub |
-|---|---|---|
-| `services/` | 后端业务模块，包含 AI、报告、MAVLink、校准、安全门、回滚、日志分析 | 是 |
-| `core/` | 核心状态模型，例如飞控状态和遥测状态 | 是 |
-| `app/` | 应用级安全逻辑和辅助模块 | 是 |
-| `config/` | AI 模型、价格、PID 白名单、报告机型等配置 | 是 |
-| `prompts/` | AI 报告、AI 调参、最终复核等提示词 | 是 |
-| `tests/` | 自动化测试 | 是 |
-| `docs/` | 工程文档和测试矩阵 | 是 |
-| `assets/` | Logo、地图等静态资源 | 是 |
-| `vendor/` | 第三方前端库，例如 Leaflet | 是 |
-| `mock/` | Mock 示例数据 | 是 |
-| `android-web-browser-app/` | Android WebView 包装实验工程 | 是，不包含本地构建工具 |
-| `logs/` | 实时飞行记录 | 否 |
-| `uploads/` | 上传的 `.ulg` 日志 | 否 |
-| `downloads/` | 下载的飞控日志或临时文件 | 否 |
-| `reports/` | 生成的 Word / PDF / HTML / Markdown 报告 | 否 |
-| `outputs/` | 生成输出和临时产物 | 否 |
-| `commands/` | 运行时命令队列和状态 | 只保留目录，不提交运行状态 |
+The startup script can use:
 
-## 后端模块说明
+- Project virtual environment: `.venv\Scripts\python.exe`
+- Bundled Codex Python runtime, when available
+- System `python`
+- Windows `py` launcher
 
-| 模块 | 作用 |
-|---|---|
-| `services/mavlink_gcs.py` | GCS heartbeat、飞控 heartbeat 过滤、source / target 身份 |
-| `services/mavlink_command_status.py` | 命令状态、COMMAND_ACK 状态分类、命令队列过期保护 |
-| `services/aircraft_calibration_service.py` | 飞机/传感器校准会话、安全确认、PX4 文本翻译 |
-| `services/rc_link_analyzer.py` | RC 链路、RSSI、通道健康、更新率诊断 |
-| `services/rc_calibration_engine.py` | 遥控器校准采样、映射和参数建议 |
-| `services/ulg_analyzer.py` | `.ulg` 解析、算法工程报告、图表和导出 |
-| `services/report_reliability.py` | verified_summary、异常过滤、报告可信度控制 |
-| `services/report_data_builder.py` | 报告结构化底稿、机型识别和阶段分析 |
-| `services/ai_report_service.py` | AI 工程报告生成 |
-| `services/ai_pid_advisor.py` | 本地工程规则 PID 建议 |
-| `services/llm_pid_advisor.py` | OpenAI / ChatGPT PID 建议 |
-| `services/safety_gate.py` | 参数写入和危险操作安全门 |
-| `services/rollback_manager.py` | PID 参数回滚快照 |
-| `services/session_logger.py` | 实时遥测记录 |
-| `services/version_info.py` | 前后端版本、build hash 和缓存诊断 |
+## 2. Clone the Repository
 
-## 数据流
-
-```mermaid
-flowchart LR
-    FC["PX4 / Pixhawk / PX6C"] --> MAV["px6c_connector.py"]
-    MAV --> API["ground_station_server.py"]
-    API --> UI["index.html / app.js"]
-    API --> LOG["logs / session.db"]
-    API --> REPORT["services/ulg_analyzer.py"]
-    REPORT --> DOC["Word / PDF / HTML / Markdown"]
-    REPORT --> AI["AI report / PID advisor"]
-    AI --> SAFE["safety_gate / rollback"]
-    SAFE --> MAV
+```powershell
+git clone https://github.com/McDonalds-Scout/AEROCENTRAL-GCS.git
+cd AEROCENTRAL-GCS
 ```
 
-## 开发边界
+Do not copy another machine's `logs/`, `uploads/`, `downloads/`, `reports/`, or `.env` files into the public project. These are local runtime data and private configuration.
 
-- 前端显示和交互优先放在 `app.js`，后续较大功能应继续拆到 `ui_modules/`。
-- 后端 API 调度放在 `ground_station_server.py`。
-- MAVLink 协议细节优先拆到 `services/mavlink_*.py`。
-- 日志报告和 AI 分析不要写进飞控连接主循环。
-- 高风险命令必须经过安全门、命令状态、COMMAND_ACK、STATUSTEXT 和超时处理。
+## 3. Start the Ground Control Station
 
-## 不应提交的内容
+Recommended startup command:
 
-以下内容只属于本地运行环境，不应提交 GitHub：
+```powershell
+.\start-ui.cmd
+```
 
-- `.env`
-- `.ulg` 飞行日志
-- `logs/`
-- `uploads/`
-- `downloads/`
-- `reports/`
-- `outputs/`
-- `connection.log`
-- Android `.build-tools/`
+The script checks dependencies, cleans stale local background processes, starts the backend, and opens the UI.
+
+If the browser does not open automatically, visit:
+
+```text
+http://127.0.0.1:8080/
+```
+
+## 4. Manual Python Setup
+
+If automatic startup fails because Python is missing, install Python 3.10 or later and rerun:
+
+```powershell
+.\start-ui.cmd
+```
+
+Manual virtual environment setup:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+## 5. Configure AI Features
+
+AI PID Advisor and AI Engineering Report generation require a private `.env` file.
+
+Create it from the public example:
+
+```powershell
+copy .env.example .env
+```
+
+Then configure:
+
+```env
+AI_PROVIDER=openai
+OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_API_KEY=YOUR_API_KEY_HERE
+```
+
+Without an API key, the local UI, MAVLink connection, deterministic Algorithm Engineering Report, and local engineering rules remain available. OpenAI-dependent features will report configuration errors or use local fallback behavior where implemented.
+
+## 6. Validate with Demo Mode First
+
+For a first run, use Demo mode before connecting real hardware:
+
+1. Open the UI.
+2. Go to Connection Settings.
+3. Select Demo mode.
+4. Click Start Connection.
+5. Confirm that the map, attitude indicator, compass, HUD, trend charts, warnings, and MAVLink message panel update.
+
+Demo data is synthetic and does not represent a real aircraft or real GPS position.
+
+## 7. USB Hardware Connection
+
+Recommended steps:
+
+1. Close QGroundControl to avoid serial-port contention.
+2. Connect the flight controller by USB.
+3. Open Connection Settings.
+4. Select USB serial connection.
+5. Choose the correct COM port.
+6. Select a baud rate, usually `57600` or `115200`.
+7. Click Start Connection.
+
+Confirm that the UI displays:
+
+- Vehicle Heartbeat
+- Target system and target component
+- Changing attitude data
+- Battery, GPS, and flight mode based on the actual flight controller state
+
+## 8. UDP MAVLink Connection
+
+Common UDP listener settings:
+
+- UI listen address: `0.0.0.0`
+- UI listen port: `14550`
+- Flight controller or telemetry device sends MAVLink UDP packets to the computer
+
+If using a target flight controller IP, confirm that the computer and flight controller are on the same subnet and that the firewall does not block UDP traffic.
+
+## 9. Common Issues
+
+### Browser Does Not Open
+
+Run:
+
+```powershell
+.\start-ui.cmd
+```
+
+Confirm that the terminal prints a local URL such as:
+
+```text
+http://127.0.0.1:8080/
+```
+
+### Dependency Installation Fails
+
+Check Python and pip:
+
+```powershell
+python --version
+python -m pip --version
+```
+
+If the network blocks Python package downloads, configure a proxy or an internal package mirror.
+
+### Serial Connection Fails
+
+Check:
+
+- QGroundControl is closed.
+- USB cable is connected.
+- COM port list has been refreshed.
+- `57600` and `115200` have both been tested.
+- Windows Device Manager shows the flight controller serial port.
+
+### UI Receives Telemetry but Commands Fail
+
+Telemetry receive and command acknowledgement are different paths. Check:
+
+- GCS Heartbeat is being sent.
+- `target_system` and `target_component` are identified.
+- COMMAND_ACK is returned.
+- STATUSTEXT shows any PX4 rejection reason.
+- The UI is in a mode that allows real-aircraft commands.
+
+## 10. Read Before Development
+
+- [Project Structure](PROJECT_STRUCTURE.md)
+- [Development and Contribution Workflow](DEVELOPMENT_WORKFLOW.md)
+- [Real-Flight Test Matrix](REAL_FLIGHT_TEST_MATRIX.md)
