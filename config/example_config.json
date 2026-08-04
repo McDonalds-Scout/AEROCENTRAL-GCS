@@ -1,0 +1,13 @@
+{
+  "description": "Copy this file to config/default.json or set equivalent values in .env for a local aircraft link.",
+  "mavlink_host": "127.0.0.1",
+  "mavlink_port": 14550,
+  "mavlink_listen_address": "0.0.0.0",
+  "mavlink_listen_port": 14550,
+  "mavlink_target_port": 14550,
+  "notes": [
+    "Do not commit real aircraft IP addresses, serial numbers, GPS coordinates, or test-site data.",
+    "For UDP target mode, set mavlink_host and mavlink_target_port to the aircraft link endpoint.",
+    "For UDP listen mode, set mavlink_listen_address and mavlink_listen_port."
+  ]
+}

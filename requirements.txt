@@ -1,0 +1,8 @@
+numpy>=1.26
+pandas>=2.1
+pymavlink>=2.4.49
+pyserial>=3.5
+pyulog>=1.2.3
+matplotlib>=3.8,<4
+python-docx>=1.2.0
+reportlab>=4.0

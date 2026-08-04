@@ -1,0 +1,44 @@
+{
+  "provider": "openai",
+  "modes": {
+    "fast_check": {
+      "label": "快速初筛",
+      "env": "AI_MODEL_FAST",
+      "default_model": "gpt-5.4-nano",
+      "cost_level": "low",
+      "description": "速度快、成本低，适合日常预览。"
+    },
+    "standard_analysis": {
+      "label": "标准分析",
+      "env": "AI_MODEL_DEFAULT",
+      "default_model": "gpt-5.4-mini",
+      "cost_level": "medium",
+      "description": "平衡成本与质量，适合大多数飞行日志。"
+    },
+    "final_review": {
+      "label": "最终复核",
+      "env": "AI_MODEL_FINAL",
+      "default_model": "gpt-5.5",
+      "cost_level": "high",
+      "description": "质量最高、成本较高，适合重要报告和关键问题分析。"
+    }
+  },
+  "tasks": {
+    "ai_report": {
+      "env": "AI_REPORT_MODEL",
+      "default_mode": "standard_analysis"
+    },
+    "ai_pid_advisor": {
+      "env": "AI_PID_MODEL",
+      "default_mode": "standard_analysis"
+    },
+    "final_review": {
+      "env": "AI_FINAL_REVIEW_MODEL",
+      "default_mode": "final_review"
+    },
+    "fast_check": {
+      "env": "AI_MODEL_FAST",
+      "default_mode": "fast_check"
+    }
+  }
+}

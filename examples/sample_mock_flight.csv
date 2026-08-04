@@ -1,0 +1,6 @@
+time_s,roll_deg,pitch_deg,yaw_deg,roll_setpoint_deg,pitch_setpoint_deg,yaw_setpoint_deg,altitude_m,ground_speed_m_s,voltage_v,current_a,sim_x_m,sim_y_m,satellites,fix_type
+0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,12.5,2.0,0,0,12,3
+1,1.0,0.5,2.0,0.5,0.2,1.0,1.0,2.0,12.4,5.0,5,0,12,3
+2,-1.0,-0.4,5.0,0.0,0.0,2.0,5.0,4.0,12.1,18.0,12,2,10,3
+3,2.0,1.0,8.0,0.5,0.2,4.0,8.0,5.0,11.9,7.0,20,4,9,3
+4,-2.0,-1.0,10.0,0.0,0.0,8.0,6.0,3.0,11.7,6.0,28,7,8,3

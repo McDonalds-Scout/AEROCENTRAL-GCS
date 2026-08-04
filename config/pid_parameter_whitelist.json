@@ -1,0 +1,23 @@
+[
+  {"name":"MC_ROLLRATE_P","min_value":0.01,"max_value":0.8,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter roll rate P gain"},
+  {"name":"MC_ROLLRATE_I","min_value":0.0,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter roll rate I gain"},
+  {"name":"MC_ROLLRATE_D","min_value":0.0,"max_value":0.05,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter roll rate D gain"},
+  {"name":"MC_PITCHRATE_P","min_value":0.01,"max_value":0.8,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter pitch rate P gain"},
+  {"name":"MC_PITCHRATE_I","min_value":0.0,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter pitch rate I gain"},
+  {"name":"MC_PITCHRATE_D","min_value":0.0,"max_value":0.05,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter pitch rate D gain"},
+  {"name":"MC_YAWRATE_P","min_value":0.01,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter yaw rate P gain"},
+  {"name":"MC_YAWRATE_I","min_value":0.0,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter yaw rate I gain"},
+  {"name":"MC_YAWRATE_D","min_value":0.0,"max_value":0.05,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter yaw rate D gain"},
+  {"name":"FW_RR_P","min_value":0.01,"max_value":1.5,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing roll rate P gain"},
+  {"name":"FW_RR_I","min_value":0.0,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing roll rate I gain"},
+  {"name":"FW_RR_D","min_value":0.0,"max_value":0.1,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing roll rate D gain"},
+  {"name":"FW_PR_P","min_value":0.01,"max_value":1.5,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing pitch rate P gain"},
+  {"name":"FW_PR_I","min_value":0.0,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing pitch rate I gain"},
+  {"name":"FW_PR_D","min_value":0.0,"max_value":0.1,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing pitch rate D gain"},
+  {"name":"FW_YR_P","min_value":0.01,"max_value":1.5,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing yaw rate P gain"},
+  {"name":"FW_YR_I","min_value":0.0,"max_value":1.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing yaw rate I gain"},
+  {"name":"FW_YR_D","min_value":0.0,"max_value":0.1,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"fixed_wing","description":"Fixed-wing yaw rate D gain"},
+  {"name":"MPC_Z_VEL_P_ACC","min_value":0.5,"max_value":10.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter vertical velocity P gain"},
+  {"name":"MPC_Z_VEL_I_ACC","min_value":0.0,"max_value":6.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter vertical velocity I gain"},
+  {"name":"MPC_Z_VEL_D_ACC","min_value":0.0,"max_value":2.0,"max_change_percent":10,"recommended_change_percent":5,"aircraft_type":"multicopter","description":"Multicopter vertical velocity D gain"}
+]
