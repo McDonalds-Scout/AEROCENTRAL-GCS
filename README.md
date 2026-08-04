@@ -224,6 +224,7 @@ Generated build artifacts under `dist/` are ignored and should not be committed.
 
 ## Future Development
 
+- Update the English release version
 - More complete desktop application packaging
 - Expanded real-flight validation matrix
 - Advanced flight analytics and anomaly detection
