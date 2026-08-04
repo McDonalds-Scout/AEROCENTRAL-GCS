@@ -1,141 +1,138 @@
-# 开发与提交规范
+# Development and Contribution Workflow
 
-这份文档用于让新同事知道如何修改项目、如何验证、如何提交，避免把地面站写崩或把实机安全风险带进代码。
+This document explains how to modify, validate, and submit changes without destabilizing the Ground Control Station or introducing real-aircraft safety risks.
 
-## 1. 开发前确认
+## 1. Before Making Changes
 
-开始修改前先运行：
-
-```powershell
-git status
-```
-
-如果有别人未提交的修改，不要直接覆盖。先确认修改内容和当前任务是否相关。
-
-## 2. 推荐修改顺序
-
-1. 先看 `README.md` 和 `docs/PROJECT_STRUCTURE.md`。
-2. 明确要改的是前端、后端、MAVLink、报告还是 AI。
-3. 小范围修改，不做无关重构。
-4. 每次改完先跑语法检查。
-5. 再启动 UI 做本地冒烟测试。
-6. 涉及实机命令时，按 `docs/REAL_FLIGHT_TEST_MATRIX.md` 记录结果。
-
-## 3. 常用验证命令
-
-Python 语法检查：
+Check the current working tree first:
 
 ```powershell
-python -m py_compile ground_station_server.py px6c_connector.py services\*.py core\*.py
+git status --short
 ```
 
-运行测试：
+If there are uncommitted changes from another developer, do not overwrite them. Review whether they are related to the current task before editing.
+
+## 2. Recommended Change Sequence
+
+1. Read `README.md` and `docs/PROJECT_STRUCTURE.md`.
+2. Identify whether the task affects frontend UI, backend API, MAVLink communication, reports, AI services, or packaging.
+3. Keep changes narrowly scoped.
+4. Run syntax checks after each meaningful change.
+5. Start the UI and run a local smoke test.
+6. For real-aircraft commands, record the result in `docs/REAL_FLIGHT_TEST_MATRIX.md`.
+
+## 3. Common Validation Commands
+
+Python compile check:
 
 ```powershell
-python -m pytest tests
+python -m compileall -q ground_station_server.py px6c_connector.py services backend core app
 ```
 
-启动 UI：
+Automated tests:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Start the Ground Control Station:
 
 ```powershell
 .\start-ui.cmd
 ```
 
-检查后端接口：
+Check backend version endpoint:
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/version
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/connection/status
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/telemetry
+Invoke-WebRequest http://127.0.0.1:8080/api/version -UseBasicParsing
 ```
 
-## 4. Git 提交
+## 4. Git Workflow
 
-提交前查看改动：
+Review changes before staging:
 
 ```powershell
-git status
-git diff
+git status --short
+git diff --stat
 ```
 
-提交并推送：
+Commit only the intended files:
 
 ```powershell
-git add .
-git commit -m "简短说明本次修改"
-git push
+git add README.md docs/
+git commit -m "Improve public documentation"
 ```
 
-不要提交：
+Do not commit:
 
 - `.env`
-- API Key
-- `.ulg`
-- `logs/`
-- `uploads/`
-- `downloads/`
-- `reports/`
-- `outputs/`
-- 本地构建工具和临时文件
+- API keys or tokens
+- Real flight logs
+- Downloaded ULog files
+- Generated reports
+- Runtime command queues
+- Local build caches
+- IDE state
+- Personal screenshots or private test notes
 
-这些已经由 `.gitignore` 排除。如果发现仍然出现在 `git status`，先停下来处理 `.gitignore`。
+These files should be excluded by `.gitignore`. If they still appear in `git status`, stop and update the ignore rules before publishing.
 
-## 5. 实机安全规则
+## 5. Real-Aircraft Safety Rules
 
-任何涉及以下操作的修改，都必须按实机测试矩阵验证：
+Any change related to the following areas requires real-aircraft validation under safe conditions:
 
 - Arm / Disarm
-- 飞行模式切换
-- 电机测试
-- 舵机测试
-- 任务上传
-- 参数写入
-- 飞机/传感器校准
-- RC / 遥控器相关功能
+- Flight mode switching
+- Motor testing
+- Servo testing
+- Mission upload
+- Parameter writing
+- Sensor calibration
+- RC and transmitter-related workflows
 
-最低安全要求：
+Minimum safety requirements:
 
-- 拆除螺旋桨。
-- 飞机处于 Disarmed。
-- 油门最低。
-- QGC 对照正常。
-- UI 能显示 COMMAND_ACK 和 STATUSTEXT。
-- 命令失败时显示 PX4 拒绝原因。
+- Propellers removed.
+- Aircraft Disarmed.
+- Throttle at minimum.
+- QGroundControl comparison available.
+- UI displays COMMAND_ACK and STATUSTEXT.
+- Command failure reasons are visible to the operator.
 
-## 6. AI 功能边界
+## 6. AI Feature Boundaries
 
-AI 可以做：
+AI may be used for:
 
-- 日志解释。
-- PID 建议。
-- 报告文字生成。
-- 风险提示。
-- 试飞复盘建议。
+- Flight log explanation
+- PID tuning recommendations
+- Engineering report generation
+- Risk highlighting
+- Post-flight review suggestions
 
-AI 不允许做：
+AI must not be used for:
 
-- 直接控制飞控。
-- 飞行中自动改 PID。
-- 自动 Arm / Disarm。
-- 自动切模式。
-- 绕过安全门写参数。
+- Direct flight controller control
+- In-flight PID modification
+- Automatic Arm / Disarm
+- Automatic flight mode switching
+- Bypassing safety gates for parameter writes
 
-所有 AI 输出都必须经过本地工程规则、安全检查和人工确认。
+All AI output must pass through local engineering rules, safety checks, and human confirmation before it affects the aircraft.
 
-## 7. 推荐拆模块方向
+## 7. Module Boundaries
 
-当前仍有几个大文件：
+Current large entrypoints remain compatible:
 
-- `app.js`
 - `ground_station_server.py`
 - `px6c_connector.py`
+- `app.js`
 
-后续拆分建议：
+Preferred direction for future changes:
 
-- 前端仪表和地图拆到 `ui_modules/`。
-- MAVLink mission 拆到 `services/mavlink_mission.py`。
-- 参数读写拆到 `services/mavlink_parameters.py`。
-- 电机/舵机测试拆到 `services/mavlink_actuator_test.py`。
-- COMMAND_ACK 和 STATUSTEXT 证据链继续独立化。
+- Keep frontend rendering utilities in `ui_modules/` when they grow large.
+- Keep MAVLink mission logic in dedicated mission modules.
+- Keep parameter read/write logic in parameter modules.
+- Keep motor and servo testing logic in actuator modules.
+- Keep COMMAND_ACK and STATUSTEXT evidence handling independent from UI rendering.
 
-拆模块时必须保证现有启动脚本和 API 路径不变，避免 UI 入口失效。
+Module extraction must preserve existing startup scripts, API paths, JSON response formats, and UI navigation.
