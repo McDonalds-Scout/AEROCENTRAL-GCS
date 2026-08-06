@@ -47,16 +47,27 @@ SAFE_RECOVERABLE_COMMANDS = {
 TRANSIENT_ACTUATOR_COMMANDS = {"set_servo", "test_motor"}
 
 
+def _read_status_file() -> dict[str, Any]:
+    for attempt in range(5):
+        try:
+            statuses = json.loads(COMMAND_STATUS.read_text(encoding="utf-8"))
+            return statuses if isinstance(statuses, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except json.JSONDecodeError:
+            return {}
+        except OSError:
+            if attempt == 4:
+                return {}
+            time.sleep(0.04 * (attempt + 1))
+    return {}
+
+
 def write_command_status(command_id: str | None, **status: Any) -> None:
     if not command_id:
         return
-    COMMAND_STATUS.parent.mkdir(exist_ok=True)
-    try:
-        statuses = json.loads(COMMAND_STATUS.read_text(encoding="utf-8"))
-        if not isinstance(statuses, dict):
-            statuses = {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        statuses = {}
+    COMMAND_STATUS.parent.mkdir(parents=True, exist_ok=True)
+    statuses = _read_status_file()
 
     statuses[command_id] = {
         **statuses.get(command_id, {}),
@@ -82,11 +93,7 @@ def write_command_status(command_id: str | None, **status: Any) -> None:
 
 
 def load_command_statuses() -> dict[str, Any]:
-    try:
-        statuses = json.loads(COMMAND_STATUS.read_text(encoding="utf-8"))
-        return statuses if isinstance(statuses, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+    return _read_status_file()
 
 
 def command_status_text(command_id: str | None, statuses: dict[str, Any] | None = None) -> str:
