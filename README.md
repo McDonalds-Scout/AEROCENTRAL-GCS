@@ -16,6 +16,7 @@ Core focus areas:
 - Deterministic flight data analysis
 - AI-assisted engineering decision support
 - Safety-oriented command acknowledgement and human confirmation
+<img width="2545" height="1469" alt="image" src="https://github.com/user-attachments/assets/3ca2c587-42ae-475b-9ad8-af1625e955c0" />
 
 ## Key Features
 
@@ -388,6 +389,7 @@ Synthetic examples are provided in `examples/`:
 
 ## Future Development
 
+- Update the English version
 - Desktop application release workflow
 - Advanced AI flight assistant
 - Automated parameter optimization support
