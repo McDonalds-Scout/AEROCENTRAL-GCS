@@ -1,70 +1,148 @@
-# MAVLink 数传接入
+# MAVLink Telemetry Setup
 
-## 数据链路
+This guide explains how AeroCentral connects to PX4/Pixhawk-compatible flight controllers through MAVLink.
 
-飞控 -> 数传电台 -> 电脑串口或 UDP -> `mavlink_bridge.py` -> UI
+## Data Link
 
-Pixhawk 6C/PX6C 使用专用连接程序 `px6c_connector.py`。
-
-UI 地址：
+Typical link:
 
 ```text
-http://127.0.0.1:8080
+Flight Controller
+  -> Telemetry radio or USB
+  -> Computer serial port or UDP
+  -> MAVLink connector
+  -> Backend API
+  -> Ground Control Interface
 ```
 
-## 1. 安装 MAVLink 依赖
+PX6C / Pixhawk 6C compatible workflows use `px6c_connector.py` through the backend connection manager.
 
-依赖已配置。需要重装时双击或运行：
+Default UI address:
+
+```text
+http://127.0.0.1:8080/
+```
+
+## 1. Install MAVLink Dependencies
+
+Dependencies are managed by `requirements.txt`. If they need to be reinstalled, run:
 
 ```powershell
-.\install-mavlink.cmd
+python -m pip install -r requirements.txt
 ```
 
-## 2. 串口数传
-
-插入数传设备后运行：
+The recommended startup script also checks dependencies:
 
 ```powershell
-.\start-serial.cmd
+.\start-ui.cmd
 ```
 
-程序会列出串口及设备名称，再选择数传对应的端口。波特率必须与数传模块设置一致，常见值为 `57600` 或 `115200`。
+## 2. Serial MAVLink Connection
 
-Pixhawk 6C 专用连接可直接运行：
+After plugging in a telemetry device or USB flight controller, start the UI and open Connection Settings.
+
+Common serial settings:
+
+```text
+Connection type: USB serial
+Port: COMx
+Baud rate: 57600 or 115200
+```
+
+The selected baud rate must match the telemetry module or flight controller configuration.
+
+For direct troubleshooting, the project also keeps compatibility helpers such as:
 
 ```powershell
 .\start-px6c.cmd
 ```
 
-选择 `1` 自动识别 USB 数传，选择 `2` 使用 UDP `14550`。
-
-## 3. UDP 数传
-
-飞控或地面站向本机 UDP `14550` 发送 MAVLink 时运行：
+These helpers are intended for development or low-level diagnostics. The normal operator path is still:
 
 ```powershell
-.\start-mavlink.cmd udpin:0.0.0.0:14550
+.\start-ui.cmd
 ```
 
-## UI 使用的 MAVLink 消息
+## 3. UDP MAVLink Connection
 
-- `HEARTBEAT`：判断飞控在线。
-- `GLOBAL_POSITION_INT`：经纬度、绝对高度、相对高度、航向。
-- `VFR_HUD`：地速和航向。
-- `SYS_STATUS`：剩余电量。
-- `GPS_RAW_INT`：卫星数和定位类型。
-- `RADIO_STATUS`：数传链路信号。
+Common UDP listener mode:
 
-## VS Code 一键运行
+```text
+Listen address: 0.0.0.0
+Listen port: 14550
+```
 
-在“运行和调试”列表中选择：
+This mode expects the flight controller, telemetry radio, or router to send MAVLink UDP packets to the computer.
 
-- `运行 UI + MAVLink 模拟测试`：验证完整系统。
-- `运行 UI + UDP 数传`：连接 UDP `14550`。
-- `3. MAVLink 串口自动选择`：扫描并选择串口数传。
-- `运行 UI + PX6C UDP`：使用 Pixhawk 6C/PX4 专用连接器。
-- `PX6C 自动连接（串口数传）`：自动忽略蓝牙虚拟串口并连接 USB 数传。
+Common UDP target mode:
 
-## 地图坐标
+```text
+Target flight controller IP: 127.0.0.1 for simulator, or the configured aircraft link IP
+Target port: 14550
+```
 
-飞控 GPS 通常输出 WGS-84 坐标，UI 直接使用 WGS-84 绘制。当前地图瓦片需要网络；如需完全离线使用，可将瓦片地址替换为本地地图服务器。
+Do not commit real aircraft IP addresses to the repository.
+
+## 4. MAVLink Messages Used by the UI
+
+Core messages:
+
+- `HEARTBEAT`: vehicle online state, armed state, vehicle type, base mode, and custom mode.
+- `ATTITUDE`: roll, pitch, and yaw.
+- `GLOBAL_POSITION_INT`: latitude, longitude, altitude, relative altitude, and heading.
+- `VFR_HUD`: ground speed, airspeed, heading, throttle, and climb rate.
+- `SYS_STATUS`: battery voltage and remaining capacity.
+- `BATTERY_STATUS`: battery voltage, current, and remaining capacity when available.
+- `GPS_RAW_INT`: satellite count and fix type.
+- `RC_CHANNELS`: real-time RC input channels.
+- `STATUSTEXT`: PX4 warning, calibration, failsafe, and command rejection text.
+- `COMMAND_ACK`: command result for Arm, Disarm, mode switching, calibration, mission, and actuator commands.
+
+## 5. GCS Behavior
+
+AeroCentral is designed to behave as a Ground Control Station, not only as a passive telemetry viewer.
+
+Required GCS behavior:
+
+- Send GCS Heartbeat at 1 Hz.
+- Use `MAV_TYPE_GCS`.
+- Use `MAV_AUTOPILOT_INVALID`.
+- Wait for vehicle Heartbeat before identifying `target_system` and `target_component`.
+- Send commands to the identified target.
+- Display COMMAND_ACK and STATUSTEXT for command results.
+
+## 6. VS Code Launch Options
+
+The repository may include VS Code launch entries for local testing. Typical workflows include:
+
+- UI plus MAVLink simulator for system validation.
+- UI plus UDP telemetry connection.
+- Serial MAVLink auto-selection for connected devices.
+- PX6C / Pixhawk-compatible MAVLink connector.
+
+Use QGroundControl as a reference when validating a new flight controller or RC setup.
+
+## 7. Map Coordinates
+
+PX4 GPS messages usually provide WGS-84 coordinates. The UI uses WGS-84 coordinates directly for map rendering.
+
+The current map tiles require network access. For fully offline operation, replace the tile URL with an internal or local map tile server.
+
+## 8. Troubleshooting
+
+If telemetry is visible but commands fail, check:
+
+- GCS Heartbeat is being sent.
+- Vehicle Heartbeat is received.
+- `target_system` and `target_component` are correct.
+- COMMAND_ACK is visible.
+- STATUSTEXT includes any PX4 rejection reason.
+- No other program is holding the same serial port.
+
+If QGroundControl works but AeroCentral does not, compare:
+
+- Serial port and baud rate.
+- UDP direction and firewall rules.
+- MAVLink target identification.
+- Requested message intervals.
+- Whether RC_CHANNELS is being received.

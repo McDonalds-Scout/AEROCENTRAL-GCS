@@ -1,0 +1,10 @@
+{
+  "mavlink_host": "127.0.0.1",
+  "mavlink_port": 14550,
+  "mavlink_listen_address": "0.0.0.0",
+  "mavlink_listen_port": 14550,
+  "mavlink_target_port": 14550,
+  "ai_provider": "local",
+  "openai_api_key": "YOUR_API_KEY_HERE",
+  "notes": "Synthetic public example. Replace values in a private .env or local config only."
+}

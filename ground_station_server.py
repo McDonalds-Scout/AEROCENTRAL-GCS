@@ -17,6 +17,7 @@ from pathlib import Path
 
 from app.safety_manager import SafetyManager
 from app.safety_manager import PROP_CONFIRMATION_TEXTS, confirmation_matches
+from core.runtime_paths import executable_dir, packaged_entry_command, resource_root, runtime_data_root
 from services.rc_calibration_engine import (
     RC_PARAMETER_NAMES,
     RcCalibrationSession,
@@ -43,7 +44,8 @@ except ImportError:
     list_ports = None
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = resource_root()
+DATA_ROOT = runtime_data_root()
 TEXT_CONTENT_TYPES = {
     "application/javascript",
     "application/json",
@@ -72,7 +74,63 @@ def load_dotenv(path):
             os.environ[key] = value
 
 
-load_dotenv(ROOT / ".env")
+for env_file in (
+    DATA_ROOT / ".env",
+    executable_dir() / ".env",
+    ROOT / ".env",
+):
+    load_dotenv(env_file)
+
+def load_json_config(path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+
+
+def config_string(config, key, env_key, default):
+    value = os.environ.get(env_key)
+    if value is None:
+        value = config.get(key, default)
+    value = str(value or "").strip()
+    return value or default
+
+
+def config_int(config, key, env_key, default):
+    value = os.environ.get(env_key)
+    if value is None:
+        value = config.get(key, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+DEFAULT_CONFIG = load_json_config(ROOT / "config" / "default.json")
+DEFAULT_MAVLINK_HOST = config_string(DEFAULT_CONFIG, "mavlink_host", "MAVLINK_HOST", "127.0.0.1")
+DEFAULT_MAVLINK_PORT = config_int(DEFAULT_CONFIG, "mavlink_port", "MAVLINK_PORT", 14550)
+DEFAULT_MAVLINK_LISTEN_ADDRESS = config_string(
+    DEFAULT_CONFIG,
+    "mavlink_listen_address",
+    "MAVLINK_LISTEN_ADDRESS",
+    "0.0.0.0",
+)
+DEFAULT_MAVLINK_LISTEN_PORT = config_int(
+    DEFAULT_CONFIG,
+    "mavlink_listen_port",
+    "MAVLINK_LISTEN_PORT",
+    DEFAULT_MAVLINK_PORT,
+)
+DEFAULT_MAVLINK_TARGET_PORT = config_int(
+    DEFAULT_CONFIG,
+    "mavlink_target_port",
+    "MAVLINK_TARGET_PORT",
+    DEFAULT_MAVLINK_PORT,
+)
+
 
 PORT = int(os.environ.get("PORT", "8080"))
 STATE_LOCK = threading.Lock()
@@ -89,27 +147,27 @@ MESSAGE_STATS = {
 }
 SSE_CLIENTS = set()
 SSE_LOCK = threading.Lock()
-LOGGER = SessionLogger(ROOT / "logs")
+LOGGER = SessionLogger(DATA_ROOT / "logs")
 SAFETY = SafetyManager("demo")
 MISSION = []
 CONNECTION_PROCESSES = []
 CONNECTION_LOG_HANDLE = None
-COMMAND_DIR = ROOT / "commands"
+COMMAND_DIR = DATA_ROOT / "commands"
 COMMAND_QUEUE = COMMAND_DIR / "px6c_commands.jsonl"
 COMMAND_STATUS_FILE = COMMAND_DIR / "px6c_command_status.json"
-CONNECTION_PID_FILE = ROOT / "connection.pids"
+CONNECTION_PID_FILE = DATA_ROOT / "connection.pids"
 TELEMETRY_HISTORY = []
-ULG_UPLOAD_DIR = ROOT / "uploads" / "ulg"
-ULG_DOWNLOAD_DIR = ROOT / "downloads" / "ulg"
-REPORT_DIR = ROOT / "reports"
+ULG_UPLOAD_DIR = DATA_ROOT / "uploads" / "ulg"
+ULG_DOWNLOAD_DIR = DATA_ROOT / "downloads" / "ulg"
+REPORT_DIR = DATA_ROOT / "reports"
 CONNECTION_CONFIG = {
     "type": "demo",
     "serialPort": "",
     "baud": 57600,
-    "listenAddress": "0.0.0.0",
-    "listenPort": 14550,
-    "targetIp": "192.168.144.12",
-    "targetPort": 19856,
+    "listenAddress": DEFAULT_MAVLINK_LISTEN_ADDRESS,
+    "listenPort": DEFAULT_MAVLINK_LISTEN_PORT,
+    "targetIp": DEFAULT_MAVLINK_HOST,
+    "targetPort": DEFAULT_MAVLINK_TARGET_PORT,
     "effectiveListenAddress": "",
     "effectiveConnection": "",
 }
@@ -121,18 +179,19 @@ PX4_FLIGHT_MODES = {
     "position": {"label": "浣嶇疆妯″紡", "px4": "POSCTL", "mainMode": 3, "subMode": 0, "requiresMission": False},
     "altitude": {"label": "瀹氶珮妯″紡", "px4": "ALTCTL", "mainMode": 2, "subMode": 0, "requiresMission": False},
     "land": {"label": "闄嶈惤妯″紡", "px4": "AUTO LAND", "mainMode": 4, "subMode": 6, "requiresMission": False},
+    "rtl": {"label": "返航模式", "px4": "AUTO RTL", "mainMode": 4, "subMode": 5, "requiresMission": False},
     "mission": {"label": "浠诲姟妯″紡", "px4": "AUTO MISSION", "mainMode": 4, "subMode": 4, "requiresMission": True},
 }
 CONNECTION_LOST_RECORDED = False
 SESSION_TOKEN = uuid.uuid4().hex
 AUTH_USERS = {
     os.environ.get("GCS_ADMIN_USER", "admin"): {
-        "password": os.environ.get("GCS_ADMIN_PASSWORD", "px6c-admin"),
+        "password": os.environ.get("GCS_ADMIN_PASSWORD", "CHANGE_ME_ADMIN_PASSWORD"),
         "role": "admin",
         "label": "管理员",
     },
     os.environ.get("GCS_OPERATOR_USER", "operator"): {
-        "password": os.environ.get("GCS_OPERATOR_PASSWORD", "px6c-operator"),
+        "password": os.environ.get("GCS_OPERATOR_PASSWORD", "CHANGE_ME_OPERATOR_PASSWORD"),
         "role": "operator",
         "label": "操作员",
     },
@@ -632,14 +691,21 @@ def broadcast(state):
     packet = f"data: {json.dumps(state, ensure_ascii=False)}\n\n".encode("utf-8")
     dead = []
     with SSE_LOCK:
-        for client in SSE_CLIENTS:
+        clients = list(SSE_CLIENTS)
+    for client in clients:
+        try:
             try:
-                client.wfile.write(packet)
-                client.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError, OSError):
-                dead.append(client)
-        for client in dead:
-            SSE_CLIENTS.discard(client)
+                client.connection.settimeout(0.05)
+            except Exception:
+                pass
+            client.wfile.write(packet)
+            client.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            dead.append(client)
+    if dead:
+        with SSE_LOCK:
+            for client in dead:
+                SSE_CLIENTS.discard(client)
 
 
 def update_state(payload):
@@ -1195,7 +1261,7 @@ def ai_pid_status_payload():
     except (FileNotFoundError, json.JSONDecodeError):
         cases = []
     status["mockCases"] = [{"id": item.get("id"), "label": item.get("label")} for item in cases]
-    status["aiConfig"] = public_ai_status()
+    status["aiConfig"] = public_ai_status("ai_pid_advisor")
     status["usage"] = usage_summary()
     return status
 
@@ -1385,6 +1451,12 @@ def change_flight_mode(payload):
         return {"accepted": False, "reason": "Mission mode requires a planned or loaded mission route", "mode": mode_key}
     if mode_key == "land" and not payload.get("confirmLand"):
         return {"accepted": False, "reason": "Land mode requires secondary confirmation", "mode": mode_key}
+    if mode_key == "rtl":
+        rtl_safety = SAFETY.can_return_to_launch(STATE)
+        if not rtl_safety.allowed:
+            return {"accepted": False, "reason": rtl_safety.reason, "mode": mode_key}
+        if not payload.get("confirmRtl"):
+            return {"accepted": False, "reason": "RTL mode requires secondary confirmation", "mode": mode_key}
     command = enqueue_connector_command({
         "command": "set_flight_mode",
         "mode": mode_key,
@@ -2119,22 +2191,25 @@ def start_connection(config):
     CONNECTION_CONFIG = {**CONNECTION_CONFIG, **config}
     kind = CONNECTION_CONFIG["type"]
     python = sys.executable
-    dependency_check = subprocess.run(
-        [python, "-c", "import pymavlink, serial"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if dependency_check.returncode != 0:
-        raise RuntimeError("MAVLink 渚濊禆缂哄け锛岃杩愯 install-mavlink.cmd")
+    if not getattr(sys, "frozen", False):
+        dependency_check = subprocess.run(
+            [python, "-c", "import pymavlink, serial"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if dependency_check.returncode != 0:
+            raise RuntimeError("MAVLink 渚濊禆缂哄け锛岃杩愯 install-mavlink.cmd")
     child_env = os.environ.copy()
     child_env["PYTHONUNBUFFERED"] = "1"
+    child_env["GCS_DATA_DIR"] = str(DATA_ROOT)
+    child_env["GCS_RESOURCE_ROOT"] = str(ROOT)
     for key in list(child_env):
         if key.upper().startswith(("DEBUGPY", "PYDEVD")):
             child_env.pop(key, None)
-    CONNECTION_LOG_HANDLE = (ROOT / "connection.log").open("a", encoding="utf-8")
+    CONNECTION_LOG_HANDLE = (DATA_ROOT / "connection.log").open("a", encoding="utf-8")
     popen_options = {
-        "cwd": ROOT,
+        "cwd": DATA_ROOT,
         "env": child_env,
         "stdout": CONNECTION_LOG_HANDLE,
         "stderr": subprocess.STDOUT,
@@ -2142,11 +2217,11 @@ def start_connection(config):
     }
     if kind == "demo":
         command = [
-            python, str(ROOT / "mavlink_simulator.py"),
+            *packaged_entry_command("mavlink_simulator.py", python),
             "--connection", f"udpout:127.0.0.1:{CONNECTION_CONFIG['listenPort']}",
         ]
         bridge = [
-            python, str(ROOT / "px6c_connector.py"),
+            *packaged_entry_command("px6c_connector.py", python),
             "--connection", f"udpin:0.0.0.0:{CONNECTION_CONFIG['listenPort']}",
             "--ui", f"http://127.0.0.1:{PORT}/api/telemetry",
             "--vehicle", "DEMO-01",
@@ -2165,7 +2240,7 @@ def start_connection(config):
             if available_ports and port not in available_ports:
                 raise ValueError(f"串口 {port} 当前不存在。可用串口：{', '.join(sorted(available_ports))}")
         command = [
-            python, str(ROOT / "px6c_connector.py"),
+            *packaged_entry_command("px6c_connector.py", python),
             "--connection", port,
             "--baud", str(CONNECTION_CONFIG.get("baud", 57600)),
             "--ui", f"http://127.0.0.1:{PORT}/api/telemetry",
@@ -2174,13 +2249,13 @@ def start_connection(config):
         CONNECTION_PROCESSES = [subprocess.Popen(command, **popen_options)]
         SAFETY.set_mode("real_readonly")
     elif kind == "udp":
-        target_ip = str(CONNECTION_CONFIG.get("targetIp", "192.168.144.12") or "192.168.144.12").strip()
-        target_port = int(CONNECTION_CONFIG.get("targetPort") or CONNECTION_CONFIG.get("listenPort", 19856))
+        target_ip = str(CONNECTION_CONFIG.get("targetIp", DEFAULT_MAVLINK_HOST) or DEFAULT_MAVLINK_HOST).strip()
+        target_port = int(CONNECTION_CONFIG.get("targetPort") or CONNECTION_CONFIG.get("listenPort", DEFAULT_MAVLINK_TARGET_PORT))
         connection = f"udpout:{target_ip}:{target_port}"
         CONNECTION_CONFIG["effectiveConnection"] = connection
         CONNECTION_CONFIG["effectiveListenAddress"] = ""
         command = [
-            python, str(ROOT / "px6c_connector.py"),
+            *packaged_entry_command("px6c_connector.py", python),
             "--connection", connection,
             "--ui", f"http://127.0.0.1:{PORT}/api/telemetry",
             "--vehicle", "PX6C-01",
@@ -2194,7 +2269,7 @@ def start_connection(config):
         CONNECTION_CONFIG["effectiveListenAddress"] = bind_address
         CONNECTION_CONFIG["effectiveConnection"] = f"udpin:{bind_address}:{listen_port}"
         command = [
-            python, str(ROOT / "px6c_connector.py"),
+            *packaged_entry_command("px6c_connector.py", python),
             "--connection", f"udpin:{bind_address}:{listen_port}",
             "--ui", f"http://127.0.0.1:{PORT}/api/telemetry",
             "--vehicle", "PX6C-01",
@@ -2209,7 +2284,7 @@ def start_connection(config):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "TianXunGroundStation/1.0"
+    server_version = "AEROCENTRALGCS/1.0"
 
     def log_message(self, fmt, *args):
         return
@@ -2666,8 +2741,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             return self.send_json({"error": str(error)}, 500)
 
-    def static_cache_headers(self, file_path, query):
-        relative = file_path.relative_to(ROOT).as_posix()
+    def static_cache_headers(self, file_path, query, relative=""):
+        relative = relative or file_path.name
         suffix = file_path.suffix.lower()
         if file_path.name == "index.html" or suffix == ".html":
             return {
@@ -2694,12 +2769,21 @@ class Handler(BaseHTTPRequestHandler):
         html = re.sub(r'(src="app\.js)(\?v=[^"]*)?(")', rf"\1?v={version}\3", html)
         return html.encode("utf-8")
 
+    def resolve_static_path(self, relative):
+        data_prefixes = ("reports/", "downloads/", "logs/")
+        base = DATA_ROOT if relative.startswith(data_prefixes) else ROOT
+        base = base.resolve()
+        file_path = (base / relative).resolve()
+        if base not in file_path.parents and file_path != base:
+            return None
+        return file_path
+
     def serve_static(self, request_path):
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         relative = "index.html" if request_path == "/" else request_path.lstrip("/")
-        file_path = (ROOT / relative).resolve()
-        if ROOT not in file_path.parents and file_path != ROOT:
+        file_path = self.resolve_static_path(relative)
+        if file_path is None:
             return self.send_error(403)
         if not file_path.is_file():
             return self.send_error(404)
@@ -2712,7 +2796,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-App-Version", str(version_payload().get("version", "unknown")))
         self.send_header("X-Frontend-Hash", str(version_payload().get("frontendHash", "unknown")))
-        for key, value in self.static_cache_headers(file_path, query).items():
+        for key, value in self.static_cache_headers(file_path, query, relative).items():
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(content)
@@ -2748,7 +2832,7 @@ def create_http_server():
 def main():
     server, actual_port = create_http_server()
     url = f"http://127.0.0.1:{actual_port}"
-    print(f"壹通无人机系统有限公司地面站：{url}")
+    print(f"AEROCENTRAL Ground Control Station：{url}")
     if os.environ.get("AUTO_OPEN") == "1":
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     threading.Thread(target=monitor_connection, daemon=True).start()

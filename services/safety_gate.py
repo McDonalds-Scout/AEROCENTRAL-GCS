@@ -5,8 +5,10 @@ import math
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import resource_root
 
-ROOT = Path(__file__).resolve().parents[1]
+
+ROOT = resource_root()
 WHITELIST_PATH = ROOT / "config" / "pid_parameter_whitelist.json"
 MAX_BATCH_SIZE = 12
 CONFIRMATION_TEXT = "确认写入参数"

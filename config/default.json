@@ -1,0 +1,7 @@
+{
+  "mavlink_host": "127.0.0.1",
+  "mavlink_port": 14550,
+  "mavlink_listen_address": "0.0.0.0",
+  "mavlink_listen_port": 14550,
+  "mavlink_target_port": 14550
+}

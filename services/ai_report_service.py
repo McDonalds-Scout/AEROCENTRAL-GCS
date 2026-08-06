@@ -11,7 +11,6 @@ import urllib.error
 import urllib.request
 
 from services.ai_report_cache import AiReportCache
-from services.ai_report_exporter import export_ai_report_files
 from services.ai_report_schema import build_ai_input_summary, normalize_ai_report, validate_ai_input_summary
 from services.ai_model_config import DEFAULT_BASE_URL, public_ai_status, resolve_model
 from services.flight_case_library import case_from_summary, save_case
@@ -29,6 +28,7 @@ DEFAULT_AI_REPORT_MODEL = ""
 DEFAULT_AI_REPORT_FALLBACK_MODELS = ""
 DEFAULT_AI_REPORT_TIMEOUT = "120"
 DEFAULT_AI_REPORT_MAX_INPUT_CHARS = 18000
+DEFAULT_AI_REPORT_VALIDATION_RETRIES = "3"
 
 
 def _ai_cache(output_dir: Path) -> AiReportCache:
@@ -100,11 +100,16 @@ def _openai_summary(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def ai_report_status() -> dict[str, Any]:
-    runtime = resolve_model("ai_report", os.environ.get("AI_MODE") or "standard_analysis")
+    runtime = resolve_model(
+        "ai_report",
+        os.environ.get("AI_REPORT_MODE") or os.environ.get("AI_MODE") or "standard_analysis",
+    )
     provider = runtime["provider"] or DEFAULT_AI_REPORT_PROVIDER
     model = runtime["model"]
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     base_url = runtime["base_url"] or DEFAULT_BASE_URL
+    fallback_models = _fallback_models(model)
+    configuration_warnings = _configuration_warnings(provider, model, fallback_models, bool(api_key))
     return {
         "ai_enabled": provider in {"openai", "chatgpt"},
         "api_key_configured": bool(api_key),
@@ -112,11 +117,12 @@ def ai_report_status() -> dict[str, Any]:
         "mode": runtime["mode"],
         "mode_label": runtime["mode_label"],
         "cost_level": runtime["cost_level"],
-        "modes": public_ai_status().get("modes", []),
+        "modes": public_ai_status("ai_report").get("modes", []),
         "provider": provider,
         "base_url": base_url,
         "engine": "openai_chat_completions",
-        "fallback_models": _fallback_models(model),
+        "fallback_models": fallback_models,
+        "configuration_warnings": configuration_warnings,
         "timeout_s": float(os.environ.get("OPENAI_TIMEOUT", DEFAULT_AI_REPORT_TIMEOUT) or DEFAULT_AI_REPORT_TIMEOUT),
         "max_input_chars": int(os.environ.get("AI_REPORT_MAX_INPUT_CHARS", DEFAULT_AI_REPORT_MAX_INPUT_CHARS) or DEFAULT_AI_REPORT_MAX_INPUT_CHARS),
         "available": provider in {"openai", "chatgpt"} and bool(api_key) and bool(model),
@@ -127,6 +133,21 @@ def _fallback_models(primary_model: str) -> list[str]:
     raw = os.environ.get("AI_REPORT_FALLBACK_MODELS", DEFAULT_AI_REPORT_FALLBACK_MODELS)
     models = [item.strip() for item in raw.split(",") if item.strip()]
     return [item for item in dict.fromkeys([primary_model, *models]) if item]
+
+
+def _configuration_warnings(provider: str, model: str, fallback_models: list[str], has_api_key: bool) -> list[str]:
+    warnings = []
+    if provider not in {"openai", "chatgpt"}:
+        warnings.append("AI_REPORT_PROVIDER/AI_PROVIDER 不是 openai，AI 报告会走本地回退。")
+    if not has_api_key:
+        warnings.append("OPENAI_API_KEY 未配置，无法调用 OpenAI，只能生成本地 verified summary 回退报告。")
+    if not model:
+        warnings.append("AI_REPORT_MODEL 未配置，无法确定 OpenAI 模型。")
+    if model and len(fallback_models) <= 1:
+        warnings.append("AI_REPORT_FALLBACK_MODELS 没有配置不同的备用模型；主模型不可用时只能本地回退。")
+    if model and model.lower().startswith(("gpt-5.4", "gpt-5.5")):
+        warnings.append("当前模型需要你的 OpenAI 账号具备访问权限；如果生成失败，请查看返回的 model_not_found/permission 错误。")
+    return warnings
 
 
 def _model_error_should_retry(message: str) -> bool:
@@ -178,6 +199,111 @@ def _post_openai_report_json(api_key: str, base_url: str, model: str, system: st
         raise RuntimeError("OpenAI API 未返回有效 JSON") from error
 
 
+def _merge_usage(primary: dict[str, Any] | None, extra: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not primary:
+        return extra
+    if not extra:
+        return primary
+    merged = dict(primary)
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        if isinstance(primary.get(key), (int, float)) or isinstance(extra.get(key), (int, float)):
+            merged[key] = int(primary.get(key) or 0) + int(extra.get(key) or 0)
+    return merged
+
+
+def _validation_repair_prompt(
+    *,
+    raw_summary: dict[str, Any],
+    rejected_report: dict[str, Any],
+    validation_error: str,
+    validation_history: list[str],
+    detail_level: str,
+    audience: str,
+    include_pid_advice: bool,
+) -> str:
+    """Ask the model to repair an already generated report instead of failing outright."""
+    payload = {
+        "task": "repair_ai_report_json_after_local_validation_failed",
+        "validation_error": validation_error,
+        "all_validation_errors_so_far": validation_history,
+        "verified_ai_input_summary": _openai_summary(raw_summary),
+        "rejected_report_json": _compact_for_openai(rejected_report),
+        "detail_level": detail_level,
+        "audience": audience,
+        "include_pid_advice": bool(include_pid_advice),
+        "strict_repair_rules": [
+            "Return strict JSON only.",
+            "Keep the same required keys: report_markdown, executive_summary, warnings, safety_note, evidence_map.",
+            "Remove or weaken any conclusion named in validation_error.",
+            "If current_reliable is false or suspicious, do not write strong power-load, motor-load, or over-current conclusions.",
+            "Do not convert excluded/unused actuator channels into actuator faults.",
+            "Do not describe yaw/heading wrap as a real 360 degree oscillation or heading oscillation.",
+            "Avoid the phrases: 360° 振荡, 航向变化幅度 360, 航向实际范围 360, yaw range 360.",
+            "Do not classify operation_info events as faults.",
+            "When evidence is weak, write it as trend reference and require manual review.",
+            "AI only provides analysis; it does not control the flight controller or modify PID in flight.",
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _normalize_with_repair(
+    *,
+    raw: dict[str, Any],
+    raw_summary: dict[str, Any],
+    candidate_model: str,
+    provider: str,
+    base_url: str,
+    options: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    try:
+        return normalize_ai_report(raw, raw_summary, candidate_model, provider), None
+    except ValueError as first_error:
+        max_retries = int(os.environ.get("AI_REPORT_VALIDATION_RETRIES", DEFAULT_AI_REPORT_VALIDATION_RETRIES) or 0)
+        if max_retries <= 0:
+            raise RuntimeError(f"OpenAI 返回内容未通过可信度校验：{first_error}") from first_error
+        last_error: Exception = first_error
+        validation_history = [str(first_error)]
+        repair_usage: dict[str, Any] | None = None
+        repair_system = (
+            SYSTEM_PROMPT
+            + "\n\n你正在修正一份未通过本地可信度校验的 AI 报告。"
+            + "必须优先满足 validation_error，删除或弱化不被 verified summary 支持的结论。"
+        )
+        for _attempt in range(max_retries):
+            repair_user = _validation_repair_prompt(
+                raw_summary=raw_summary,
+                rejected_report=raw,
+                validation_error=str(last_error),
+                validation_history=validation_history,
+                detail_level=options.get("detailLevel", "standard"),
+                audience=options.get("audience", "engineering"),
+                include_pid_advice=options.get("includePidAdvice", True),
+            )
+            repaired_raw, usage = _post_openai_report_json(
+                api_key=os.environ["OPENAI_API_KEY"].strip(),
+                base_url=base_url,
+                model=candidate_model,
+                system=repair_system,
+                user=repair_user,
+                timeout=float(os.environ.get("OPENAI_TIMEOUT", DEFAULT_AI_REPORT_TIMEOUT) or DEFAULT_AI_REPORT_TIMEOUT),
+            )
+            repair_usage = _merge_usage(repair_usage, usage)
+            try:
+                repaired = normalize_ai_report(repaired_raw, raw_summary, candidate_model, provider)
+                repaired.setdefault("warnings", []).append(
+                    f"首轮 AI 输出未通过可信度校验，系统已自动修正后通过校验。首轮问题：{first_error}"
+                )
+                return repaired, repair_usage
+            except ValueError as repair_error:
+                last_error = repair_error
+                validation_history.append(str(repair_error))
+                raw = repaired_raw
+        raise RuntimeError(
+            f"OpenAI 返回内容未通过可信度校验：{first_error}；自动修正仍失败：{last_error}"
+        ) from last_error
+
+
 def _openai_report(raw_summary: dict[str, Any], options: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
     runtime = resolve_model("ai_report", options.get("modelMode") or options.get("mode"))
     status = ai_report_status()
@@ -209,10 +335,15 @@ def _openai_report(raw_summary: dict[str, Any], options: dict[str, Any]) -> tupl
                 user=user_prompt,
                 timeout=float(os.environ.get("OPENAI_TIMEOUT", DEFAULT_AI_REPORT_TIMEOUT) or DEFAULT_AI_REPORT_TIMEOUT),
             )
-            try:
-                report = normalize_ai_report(raw, raw_summary, candidate_model, runtime["provider"])
-            except ValueError as error:
-                raise RuntimeError(f"OpenAI 返回内容未通过可信度校验：{error}") from error
+            report, repair_usage = _normalize_with_repair(
+                raw=raw,
+                raw_summary=raw_summary,
+                candidate_model=candidate_model,
+                provider=runtime["provider"],
+                base_url=base_url,
+                options=options,
+            )
+            usage = _merge_usage(usage, repair_usage)
             report["modelMode"] = runtime["mode"]
             report["modelModeLabel"] = runtime["mode_label"]
             report["costLevel"] = runtime["cost_level"]
@@ -358,6 +489,8 @@ OpenAI/ChatGPT 调用失败，已按 AI 调参模块相同思路回退到本地 
 
 
 def generate_ai_report(upload_path: Path, output_dir: Path, options: dict[str, Any] | None = None) -> dict[str, Any]:
+    from services.ai_report_exporter import export_ai_report_files
+
     options = options or {}
     report_data = build_report_data(upload_path)
     summary = build_ai_input_summary(report_data)

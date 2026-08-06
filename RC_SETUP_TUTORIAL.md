@@ -1,127 +1,130 @@
-# RC 设置教程
+# RC Setup Tutorial
 
-本教程用于当前无人机地面站 UI 的“RC 设置”页面。该功能参考 QGroundControl Radio Setup，但必须以安全为先：只读取 `RC_CHANNELS` 和 PX4 RC 参数，写入前必须人工确认，不发送 `RC_OVERRIDE`、不发送 `MANUAL_CONTROL`、不自动解锁。
+This tutorial explains how to use the RC Setup page in AeroCentral. The workflow is inspired by QGroundControl Radio Setup, but the safety boundary is strict: the UI reads `RC_CHANNELS` and PX4 RC parameters, requires human confirmation before parameter writes, and does not send `RC_OVERRIDE`, `MANUAL_CONTROL`, or automatic Arm commands.
 
-## 1. 准备工作
+## 1. Preparation
 
-1. 拆除螺旋桨。
-2. 打开遥控器，并确认接收机已经和飞控连接。
-3. 用 USB、数传或 UDP 连接飞控。
-4. 打开 UI：`http://127.0.0.1:8080/`。
-5. 左侧进入“连接设置”，确认 MAVLink 已连接并收到 heartbeat。
-6. 左侧进入“RC 设置”。
+1. Remove all propellers.
+2. Turn on the transmitter.
+3. Confirm that the receiver is connected to the flight controller.
+4. Connect the flight controller through USB, telemetry radio, or UDP MAVLink.
+5. Open the UI: `http://127.0.0.1:8080/`.
+6. Go to Connection Settings and confirm that MAVLink is connected and vehicle Heartbeat is received.
+7. Open the RC Setup page.
 
-## 2. 和 QGC 对比
+## 2. Compare with QGroundControl
 
-先在 QGC 的 Radio 页面确认遥控器正常，再打开本 UI 的“RC 设置 / RC Monitor”。
+Before using AeroCentral RC Setup, confirm that the transmitter works correctly in QGroundControl Radio Setup.
 
-对比重点：
+Comparison points:
 
-- QGC 的 CH1-CH18 数值应和本 UI 的 CH1-CH18 基本一致。
-- 拨动 Roll / Pitch / Throttle / Yaw 时，两边变化的通道应一致。
-- 如果 QGC 有数值、本 UI 没数值，优先检查 MAVLink 是否收到 `RC_CHANNELS`。
-- 如果本 UI 的 mapped control 不对，优先检查 `RC_MAP_ROLL`、`RC_MAP_PITCH`、`RC_MAP_THROTTLE`、`RC_MAP_YAW`。
+- QGroundControl CH1-CH18 values should broadly match AeroCentral CH1-CH18 values.
+- Moving Roll, Pitch, Throttle, and Yaw should change the same channels in both tools.
+- If QGroundControl shows RC values but AeroCentral does not, check whether AeroCentral is receiving `RC_CHANNELS`.
+- If mapped controls are incorrect, check `RC_MAP_ROLL`, `RC_MAP_PITCH`, `RC_MAP_THROTTLE`, and `RC_MAP_YAW`.
 
-注意：`RC_MAP_*` 是 1-based 通道编号。例如 `RC_MAP_ROLL=1` 表示 `CH1`，对应程序数组里的 `channels[0]`。
+Important indexing rule:
 
-## 3. RC Monitor 页面说明
+```text
+RC_MAP_ROLL=1 means CH1.
+In code, CH1 corresponds to channels[0].
+```
 
-RC Monitor 会显示：
+## 3. RC Monitor
 
-- Connected / Disconnected
-- Vehicle heartbeat
-- GCS heartbeat
-- target system / component
-- UI refresh rate
-- CH1 到 CH18 的 PWM
-- 每路百分比
-- 每路当前 `MIN / MAX / TRIM / REV`
-- Roll / Pitch / Throttle / Yaw / Flight Mode / Arm Switch 映射
+RC Monitor displays:
 
-如果显示 `No RC`：
+- Raw CH1 to CH18 PWM values
+- Percentage for each channel
+- `MIN / MAX / TRIM / REV` values when available
+- Mapped Roll, Pitch, Throttle, and Yaw
+- Flight Mode channel
+- Arm Switch channel
+- RC Link Status
+- RSSI when MAVLink provides it
+- Update rate and last update age
+- Channel stability and possible jitter
 
-1. 确认飞控真的连接。
-2. 确认遥控器打开。
-3. 确认 QGC 能看到 RC。
-4. 确认本 UI 的 MAVLink 连接不是旧连接或错误端口。
+If the page shows `No RC`:
 
-## 4. RC Calibration Wizard 使用流程
+1. Confirm that the flight controller is connected.
+2. Confirm that the transmitter is powered on.
+3. Confirm that QGroundControl can see RC channels.
+4. Confirm that AeroCentral is connected to the correct MAVLink link.
+5. Check whether `RC_CHANNELS` is requested and received.
 
-进入“RC 设置”，切到 `Calibration Wizard`。
+## 4. RC Calibration Wizard
 
-1. 点击“开始 RC 校准会话”。
-2. Step 1 检测遥控器：确认至少 5 路有效通道。
-3. Step 2 中位采样：松开所有摇杆，油门保持最低，点击“采样当前步骤”。
-4. Step 3 Roll：左右打满 Roll，再回中，点击采样。
-5. Step 4 Pitch：前后打满 Pitch，再回中，点击采样。
-6. Step 5 Throttle：油门最低到最高，再回最低，点击采样。
-7. Step 6 Yaw：左右打满 Yaw，再回中，点击采样。
-8. Step 7 min/max：移动所有摇杆、开关、旋钮到完整行程，点击采样。
-9. Step 8 Flight Mode：拨动飞行模式开关所有档位，点击采样。
-10. Step 9 Arm Switch：拨动解锁开关，点击采样。
-11. 点击“生成预览”。
-12. 检查参数 diff。
-13. 确认无误后输入 `确认写入RC参数`。
-14. 点击“写入 PX4”。
+Open RC Setup and select the Calibration Wizard.
 
-## 5. 参数写入说明
+Recommended workflow:
 
-写入前 UI 会备份当前 RC 参数，主要包括：
+1. Start the RC calibration session.
+2. Detection: confirm that at least five valid channels are available.
+3. Center sampling: release all sticks, keep throttle at minimum, and sample the current step.
+4. Roll sampling: move Roll fully left and right, return to center, then sample.
+5. Pitch sampling: move Pitch fully forward and backward, return to center, then sample.
+6. Throttle sampling: move throttle from minimum to maximum and back to minimum, then sample.
+7. Yaw sampling: move Yaw fully left and right, return to center, then sample.
+8. Switch sampling: toggle mode and arm switches as instructed.
+9. Review detected mapping and parameter diff.
+10. Write parameters only after confirming that the mapping is correct.
 
-- `RC_MAP_ROLL`
-- `RC_MAP_PITCH`
-- `RC_MAP_THROTTLE`
-- `RC_MAP_YAW`
-- `RC_MAP_FLTMODE`
-- `RC_MAP_ARM_SW`
-- `RC1_MIN` 到 `RC18_MIN`
-- `RC1_MAX` 到 `RC18_MAX`
-- `RC1_TRIM` 到 `RC18_TRIM`
-- `RC1_REV` 到 `RC18_REV`
-- `RC1_DZ` 到 `RC18_DZ`
+## 5. Parameter Write Safety
 
-写入完成后，UI 会重新请求 RC 参数。你需要再次检查 RC Monitor，确认参数变化已经读回。
+Before writing RC parameters:
 
-## 6. 恢复备份
+- Aircraft must be Disarmed.
+- Propellers must be removed.
+- Throttle must be at minimum.
+- Mapping preview must be reviewed.
+- Parameter diff must be checked.
+- Operator confirmation text must be entered exactly as required by the UI.
 
-如果写入后发现遥控器方向或映射异常：
+AeroCentral does not automatically Arm the vehicle, does not send RC override commands, and does not control the aircraft from the RC calibration page.
 
-1. 保持飞控连接。
-2. 确认飞控未解锁。
-3. 在恢复输入框输入 `确认恢复RC参数`。
-4. 点击“恢复备份”。
-5. 等待队列执行后，再刷新 RC Monitor。
+## 6. Backup and Rollback
 
-## 7. 安全注意事项
+Before writing new RC parameters:
 
-- 飞控 Armed 时禁止 RC 校准和写入。
-- 飞行中禁止写 RC 参数。
-- 写入前必须检查 diff。
-- UI 不会自动解锁。
-- UI 不发送 `RC_OVERRIDE`。
-- UI 不发送 `MANUAL_CONTROL`。
-- UI 不控制电机或舵机。
-- 不确定识别结果时，不要写入，重新采样或手动检查。
+1. Read the current parameter list.
+2. Save or review the current `RC_MAP_*` and `RCx_*` values.
+3. Confirm the generated diff.
+4. Write only the intended parameters.
+5. Refresh RC Monitor after the queue is executed.
 
-## 8. 常见问题
+If the result is incorrect, use the saved values to restore the previous configuration.
 
-### QGC 正常，本 UI 没有 RC 数据
+## 7. Safety Notes
 
-检查 UI 的 MAVLink 连接是否收到 `RC_CHANNELS`。如果只收到姿态/GPS，没有收到 `RC_CHANNELS`，说明消息流没有请求成功或链路配置不同。
+- RC calibration and parameter writes are blocked when the vehicle is Armed.
+- Parameter writes during flight are not allowed.
+- Always inspect the diff before writing.
+- The UI does not automatically Arm the aircraft.
+- The UI does not send `RC_OVERRIDE`.
+- The UI does not send `MANUAL_CONTROL`.
+- The UI does not directly control motors or servos from RC Setup.
+- If the mapping result is uncertain, do not write parameters. Repeat sampling or inspect values manually.
 
-### 通道和 QGC 不一致
+## 8. Common Issues
 
-检查是否连到了同一个飞控和同一条链路。RC 原始通道必须来自 `RC_CHANNELS`，不能用 `SERVO_OUTPUT_RAW` 或执行器输出替代。
+### QGroundControl Works but AeroCentral Shows No RC Data
 
-### 写入按钮没反应
+Check whether AeroCentral receives `RC_CHANNELS`. If attitude and GPS update but `RC_CHANNELS` does not, the message interval may not be requested correctly or the link may differ from the one used by QGroundControl.
 
-确认：
+### Channels Do Not Match QGroundControl
 
-- 当前模式允许写参数。
-- 飞控未解锁。
-- 输入的确认文本是 `确认写入RC参数`。
-- 浏览器页面是最新版本，必要时按 `Ctrl + F5`。
+Confirm that both applications are connected to the same flight controller and the same MAVLink path. Raw RC input must come from `RC_CHANNELS`, not from `SERVO_OUTPUT_RAW` or actuator output topics.
 
-### 油门最低不是 0%
+### Write Button Does Not Work
 
-检查 `RC_MAP_THROTTLE` 指向的通道是否正确，以及对应 `RCx_MIN / RCx_MAX / RCx_TRIM` 是否合理。油门的 `TRIM` 通常应接近 `MIN`。
+Check:
+
+- Current mode allows parameter writing.
+- The flight controller is Disarmed.
+- The required confirmation text is entered exactly.
+- The browser loaded the latest UI version. Use `Ctrl + F5` if necessary.
+
+### Throttle Minimum Is Not 0 Percent
+
+Check whether `RC_MAP_THROTTLE` points to the correct channel and whether the corresponding `RCx_MIN`, `RCx_MAX`, and `RCx_TRIM` values are reasonable. For throttle, `TRIM` is usually close to `MIN`.

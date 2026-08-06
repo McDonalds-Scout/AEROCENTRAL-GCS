@@ -7,17 +7,17 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>壹通无人机系统有限公司 · 无人机任务控制中心</title>
-  <link rel="icon" type="image/png" href="assets/yitong-logo.png">
+  <title>AEROCENTRAL Ground Control Station</title>
+  <link rel="icon" type="image/png" href="assets/aerocentral-logo.png">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="styles.css?v=gcs-69">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar" aria-label="主导航">
-      <a class="brand" id="brandHome" href="#" aria-label="壹通无人机系统有限公司任务控制中心">
-        <span class="brand-mark"><img src="assets/yitong-logo.png" alt="壹通无人机系统有限公司 Logo"></span>
-        <span class="brand-copy"><strong>壹通无人机系统有限公司</strong><small>YITONG UAV SYSTEMS</small></span>
+      <a class="brand" id="brandHome" href="#" aria-label="AEROCENTRAL Ground Control Station">
+        <span class="brand-mark"><img src="assets/aerocentral-logo.png" alt="AEROCENTRAL Logo"></span>
+        <span class="brand-copy"><strong>AEROCENTRAL</strong><small>GROUND CONTROL STATION</small></span>
       </a>
 
       <nav class="nav-list">
@@ -250,10 +250,11 @@
             <button data-flight-mode="position">位置</button>
             <button data-flight-mode="altitude">定高</button>
             <button data-flight-mode="land">降落</button>
+            <button data-flight-mode="rtl">返航</button>
             <button data-flight-mode="mission">任务</button>
           </div>
           <em class="flight-mode-command-state" id="flightModeCommandState">等待 MAVLink 连接后才能切换飞行模式</em>
-          <p class="flight-mode-safety-note">模式命令通过 MAVLink 发送到飞控；降落模式会二次确认，飞控拒绝时会显示 COMMAND_ACK / STATUSTEXT。</p>
+          <p class="flight-mode-safety-note">模式命令通过 MAVLink 发送到飞控；降落和返航会二次确认，飞控拒绝时会显示 COMMAND_ACK / STATUSTEXT。</p>
         </article>
         </section>
         </div>
@@ -383,11 +384,11 @@
               </div>
               <div class="form-row udp-fields">
                 <label>UDP 监听地址<input id="listenAddress" value="0.0.0.0"></label>
-                <label>UDP 监听端口<input id="listenPort" type="number" value="19856"></label>
+                <label>UDP 监听端口<input id="listenPort" type="number" value="14550"></label>
               </div>
               <div class="form-row udp-fields">
-                <label>目标飞控 IP<input id="targetIp" value="192.168.144.12"></label>
-                <label>目标飞控端口<input id="targetPort" type="number" value="19856"></label>
+                <label>目标飞控 IP<input id="targetIp" value="127.0.0.1"></label>
+                <label>目标飞控端口<input id="targetPort" type="number" value="14550"></label>
               </div>
               <div class="connection-help udp-fields" id="udpListenHint">WiFi UDP 连接使用目标飞控 IP/端口；UDP 监听模式使用本机监听地址/端口。</div>
               <div class="udp-address-tools udp-fields">
@@ -476,7 +477,7 @@
           </div>
           <div class="flight-log-note">
             <span>保存位置</span>
-            <strong>C:\Users\19636\OneDrive\文档\MATLAB\task4\新建文件夹\downloads\ulg</strong>
+            <strong>runtime data / downloads / ulg</strong>
             <small>MAVLink 日志下载每包数据很小，几 MB 的 .ulg 可能需要几分钟；大日志建议使用 USB 直连，最快方式仍然是取出 SD 卡用读卡器拷贝。</small>
             <small>如果列表为空，请确认飞控插有 SD 卡、PX4 日志记录已开启，并且当前连接不是单纯遥测只读转发。</small>
           </div>
@@ -833,4 +834,3 @@
   <script src="app.js?v=gcs-70"></script>
 </body>
 </html>
-

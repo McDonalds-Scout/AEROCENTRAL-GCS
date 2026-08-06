@@ -1,31 +1,36 @@
-# Nova Android Browser
+# Android Web Browser Wrapper
 
-这是一个独立的新项目，不会修改上级目录里的地面站 UI 文件。
+This directory contains an experimental Android-focused Web wrapper. It is independent from the main AeroCentral Ground Control Station and does not modify the parent project files.
 
-## 功能
+## Features
 
-- 安卓手机优先的浏览器界面
-- 地址栏搜索和网址访问
-- 多标签页管理
-- 首页快捷入口
-- 历史记录和收藏夹
-- PWA manifest 与 service worker，可添加到安卓主屏幕
-- 内嵌网页预览，以及受限网站的外部打开按钮
+- Mobile-first browser interface for Android devices.
+- Address bar for direct URL entry and search.
+- Multi-tab browsing.
+- Home shortcuts.
+- History and bookmarks.
+- PWA manifest and service worker support for add-to-home-screen testing.
+- Embedded page preview where allowed by the target website.
+- External-open option for websites that block iframe embedding.
 
-## 运行
+## Running Locally
 
-直接打开 `index.html` 可以查看界面。若要测试 PWA 安装和 service worker，请在本目录启动自带静态服务器：
+Opening `index.html` directly is enough to inspect the interface.
+
+To test PWA installation and service worker behavior, start the local static server in this directory:
 
 ```powershell
 node server.js
 ```
 
-然后在安卓设备或桌面浏览器访问：
+Then open:
 
 ```text
-http://127.0.0.1:8098
+http://127.0.0.1:8080/
 ```
 
-## 说明
+## Notes
 
-网页版应用无法像原生 Android WebView 那样绕过网站安全策略。很多网站会通过 `X-Frame-Options` 或 `Content-Security-Policy` 禁止被 iframe 嵌入，所以应用提供了“打开”按钮，用系统浏览器新窗口访问真实网页。
+Web applications cannot bypass website security policies in the same way as a native Android WebView. Many websites block iframe embedding through `X-Frame-Options` or `Content-Security-Policy`. For these websites, the wrapper provides an external-open action so the page can be opened in the system browser.
+
+This wrapper is a separate experiment and is not required for AeroCentral desktop or Web operation.

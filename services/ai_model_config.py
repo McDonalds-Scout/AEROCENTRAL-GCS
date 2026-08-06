@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import resource_root
 
-ROOT = Path(__file__).resolve().parents[1]
+
+ROOT = resource_root()
 CONFIG_PATH = ROOT / "config" / "ai_models.json"
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 ALLOWED_OPENAI_PROVIDERS = {"openai", "chatgpt"}
@@ -41,16 +43,12 @@ def resolve_model(task_type: str, mode: str | None = None) -> dict[str, Any]:
     modes = config.get("modes") or {}
     tasks = config.get("tasks") or {}
     requested_mode = (mode or "").strip()
-    explicit_mode = requested_mode in modes
     mode_key = normalize_ai_mode(mode, task_type)
     mode_config = modes.get(mode_key) or {}
     task_config = tasks.get(task_type) or {}
-    env_order = []
-    if not explicit_mode:
-        env_order.append(task_config.get("env"))
-    env_order.append(mode_config.get("env"))
+    env_order = [task_config.get("env"), mode_config.get("env")]
     model = ""
-    for env_name in env_order:
+    for env_name in dict.fromkeys(env_order):
         if not env_name:
             continue
         model = os.environ.get(str(env_name), "").strip()
@@ -77,11 +75,11 @@ def resolve_model(task_type: str, mode: str | None = None) -> dict[str, Any]:
     }
 
 
-def public_ai_status() -> dict[str, Any]:
+def public_ai_status(task_type: str = "ai_report") -> dict[str, Any]:
     config = ai_model_config()
     modes = []
     for key, value in (config.get("modes") or {}).items():
-        resolved = resolve_model("ai_report", key)
+        resolved = resolve_model(task_type, key)
         modes.append({
             "mode": key,
             "label": value.get("label", key),

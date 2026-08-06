@@ -49,6 +49,41 @@ function showToast(title = "操作成功", message = "设置已更新") {
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+function initDesktopRefreshControls() {
+  const desktop = window.aeroCentralDesktop;
+  if (!desktop?.isDesktop || $("#desktopRefreshControls")) return;
+  const actions = $(".topbar-actions");
+  if (!actions) return;
+  const group = document.createElement("div");
+  group.id = "desktopRefreshControls";
+  group.className = "desktop-refresh-controls";
+  group.innerHTML = `
+    <button type="button" id="desktopRefreshUi" title="刷新软件界面，快捷键 F5">刷新</button>
+    <button type="button" id="desktopHardRefreshUi" title="强制清理缓存并刷新，快捷键 Ctrl+Shift+R">强制刷新</button>
+  `;
+  const anchor = $("#clock");
+  actions.insertBefore(group, anchor || null);
+
+  $("#desktopRefreshUi", group).addEventListener("click", async () => {
+    showToast("正在刷新软件界面", "仅刷新 UI，不会重启后端或断开飞控连接");
+    try {
+      await desktop.refresh(false);
+    } catch (_) {
+      window.location.reload();
+    }
+  });
+  $("#desktopHardRefreshUi", group).addEventListener("click", async () => {
+    showToast("正在强制刷新", "清理 Electron 缓存后重新加载当前 UI");
+    try {
+      await desktop.refresh(true);
+    } catch (_) {
+      window.location.replace(`${window.location.pathname}?v=${Date.now()}`);
+    }
+  });
+}
+
+initDesktopRefreshControls();
+
 function safeStorageGet(key) {
   try {
     return localStorage.getItem(key);
@@ -379,6 +414,7 @@ function focusPanel(selector) {
 
 function showPage(name) {
   activePageName = name;
+  document.body.classList.toggle("flight-ops-active", name === "overview");
   $$(".page-view").forEach((page) => page.classList.remove("active"));
   const target = $(`#${name}Page`);
   if (target) target.classList.add("active");
@@ -395,17 +431,6 @@ function showPage(name) {
 }
 
 function installFlightOpsEnhancements() {
-  const topbarActions = $(".topbar-actions");
-  if (topbarActions && !$("#topThrottleStatus")) {
-    topbarActions.insertAdjacentHTML("afterbegin", `
-      <div class="top-throttle-status" id="topThrottleStatus" title="来自 RC_CHANNELS + RC_MAP_THROTTLE 的真实油门输入">
-        <small>油门</small>
-        <strong id="topThrottleValue">--%</strong>
-        <span id="topThrottleSource">等待 RC</span>
-      </div>
-    `);
-  }
-
   const tuningNav = $('.nav-item[data-page="tuning"]');
   if (tuningNav && !$('.nav-item[data-page="aircraftCalibration"]')) {
     tuningNav.insertAdjacentHTML("afterend", `
@@ -414,6 +439,7 @@ function installFlightOpsEnhancements() {
       </button>
     `);
   }
+  const topbarActions = $(".topbar-actions");
   const newMissionButton = $("#newMission");
   if (topbarActions && !$("#armToggleButton")) {
     (newMissionButton || topbarActions).insertAdjacentHTML(newMissionButton ? "beforebegin" : "beforeend", `
@@ -744,6 +770,9 @@ function ensureTopFlightStatusBar() {
     <div class="top-flight-pill battery"><small>BAT</small><strong id="topFlightBattery">--%</strong></div>
     <div class="top-flight-pill datalink"><small>MAV</small><strong id="topFlightLink">-- Hz</strong></div>
     <div class="top-flight-pill rc"><small>RC</small><strong id="topFlightRc">Unknown</strong></div>
+    <div class="top-flight-pill throttle top-throttle-status" id="topThrottleStatus" title="来自 RC_CHANNELS + RC_MAP_THROTTLE 的真实油门输入">
+      <small>THR</small><strong id="topThrottleValue">--%</strong><span id="topThrottleSource">等待 RC</span>
+    </div>
     <div class="top-flight-pill mission"><small>MISSION</small><strong id="topFlightMission">待规划</strong></div>
   `;
   topbar.insertBefore(status, actions || null);
@@ -752,15 +781,17 @@ function ensureTopFlightStatusBar() {
 function installFlightOperationsLayout() {
   const overview = $("#overviewPage");
   if (!overview || $("#flightOpsDeck")) return;
+  document.body.classList.add("flight-ops-active");
   ensureTopFlightStatusBar();
 
   const deck = document.createElement("section");
   deck.id = "flightOpsDeck";
   deck.className = "flight-ops-deck";
   deck.innerHTML = `
-    <div class="flight-ops-left" aria-label="主飞行仪表"></div>
+    <div class="flight-ops-mission" aria-label="任务摘要"></div>
     <div class="flight-ops-map" aria-label="地图与轨迹"></div>
-    <div class="flight-ops-right" aria-label="安全与遥测"></div>
+    <aside class="flight-ops-left" aria-label="飞行数据侧栏"></aside>
+    <aside class="flight-ops-right" aria-label="飞行状态侧栏"></aside>
   `;
 
   const bottom = document.createElement("section");
@@ -768,27 +799,29 @@ function installFlightOperationsLayout() {
   bottom.className = "flight-ops-bottom-strip";
 
   overview.insertBefore(deck, overview.firstChild);
-  overview.appendChild(bottom);
+  deck.appendChild(bottom);
 
+  const mission = $(".flight-ops-mission", deck);
   const left = $(".flight-ops-left", deck);
   const center = $(".flight-ops-map", deck);
   const right = $(".flight-ops-right", deck);
   const workspace = $(".workspace-grid", overview);
   const analysis = $(".analysis-grid", overview);
 
-  moveExistingElement(left, $(".attitude-panel", overview));
-  moveExistingElement(left, $(".compass-panel", overview));
+  moveExistingElement(mission, $(".mission-strip", overview));
   moveExistingElement(left, $(".metrics-grid", overview));
 
-  moveExistingElement(center, $(".mission-strip", overview));
   moveExistingElement(center, $(".map-panel", overview));
 
   moveExistingElement(right, $(".alerts-panel", overview));
-  moveExistingElement(right, $(".flight-readiness-strip", overview));
   moveExistingElement(right, $(".systems-panel", overview));
   moveExistingElement(right, $("#mavlinkMonitorPanel"));
+  moveExistingElement(right, $("#commandEvidencePanel"));
 
   moveExistingElement(bottom, $(".chart-panel", overview));
+  moveExistingElement(bottom, $(".attitude-panel", overview));
+  moveExistingElement(bottom, $(".compass-panel", overview));
+  moveExistingElement(bottom, $(".flight-readiness-strip", overview));
   moveExistingElement(bottom, $(".flight-hud", overview));
 
   workspace?.remove();
@@ -2067,12 +2100,6 @@ function signedAngle(value) {
   return `${number >= 0 ? "+" : ""}${number.toFixed(1)}°`;
 }
 
-function compassLabel(degrees) {
-  const value = (degrees % 360 + 360) % 360;
-  const cardinals = { 0: "N", 90: "E", 180: "S", 270: "W" };
-  return cardinals[value] || String(Math.round(value)).padStart(3, "0");
-}
-
 function headingCardinal(degrees) {
   const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   return directions[Math.round(((degrees % 360 + 360) % 360) / 45) % directions.length];
@@ -2538,6 +2565,8 @@ updateAttitude.onlineStateApplied = false;
 function normalizeFlightModeKey(mode = "") {
   const text = String(mode || "").toUpperCase();
   if (text.includes("AUTO") && text.includes("MISSION")) return "mission";
+  if (text.includes("AUTO") && text.includes("RTL")) return "rtl";
+  if (text === "RTL" || text.includes("RETURN")) return "rtl";
   if (text.includes("AUTO") && text.includes("LAND")) return "land";
   if (text.includes("POSCTL") || text.includes("POSITION")) return "position";
   if (text.includes("ALTCTL") || text.includes("ALTITUDE")) return "altitude";
@@ -2550,7 +2579,7 @@ function updateFlightModeButtons(mode) {
   $$("#flightModeButtons [data-flight-mode]").forEach((button) => {
     const key = button.dataset.flightMode;
     button.classList.toggle("active", key === active);
-    button.classList.toggle("danger", key === "land");
+    button.classList.toggle("danger", key === "land" || key === "rtl");
   });
 }
 
@@ -2560,9 +2589,13 @@ async function requestFlightMode(modeKey) {
     position: "位置模式",
     altitude: "定高模式",
     land: "降落模式",
+    rtl: "返航模式",
     mission: "任务模式",
   }[modeKey] || modeKey;
   if (modeKey === "land" && !window.confirm("确认切换到降落模式？飞控会开始执行 AUTO LAND。")) {
+    return;
+  }
+  if (modeKey === "rtl" && !window.confirm("确认切换到返航模式？飞控会开始执行 AUTO RTL。")) {
     return;
   }
   const button = $(`#flightModeButtons [data-flight-mode="${modeKey}"]`);
@@ -2571,7 +2604,7 @@ async function requestFlightMode(modeKey) {
     if ($("#flightModeCommandState")) $("#flightModeCommandState").textContent = `正在请求切换到 ${label}...`;
     const result = await api("/api/flight-mode", {
       method: "POST",
-      body: JSON.stringify({ mode: modeKey, confirmLand: modeKey === "land" })
+      body: JSON.stringify({ mode: modeKey, confirmLand: modeKey === "land", confirmRtl: modeKey === "rtl" })
     });
     if (!result.accepted) {
       if ($("#flightModeCommandState")) $("#flightModeCommandState").textContent = result.reason;
@@ -2682,7 +2715,6 @@ function renderMavlinkMonitor(stats, status = {}) {
   const normalized = normalizeMessageStats(stats);
   const heartbeat = !!(status.heartbeat || status.connected || normalized.counts.HEARTBEAT);
   const receivedTypes = Object.keys(normalized.counts).filter((key) => normalized.counts[key] > 0);
-  const latestRecent = normalized.recent.slice(-4).reverse();
   const summary = $("#mavlinkMonitorSummary");
   const badge = $("#mavlinkMonitorBadge");
   if (summary) {
@@ -2716,13 +2748,7 @@ function renderMavlinkMonitor(stats, status = {}) {
       </div>
     `;
   }).join("");
-  const recent = latestRecent.length ? `
-    <div class="mavlink-recent">
-      <small>最近消息</small>
-      <strong>${latestRecent.map((item) => escapeAttribute(item.type || item)).join(" / ")}</strong>
-    </div>
-  ` : "";
-  list.innerHTML = rows + recent;
+  list.innerHTML = rows;
 }
 
 function renderConnectionSelfCheck(result) {
@@ -3496,10 +3522,6 @@ refreshSerialPorts = async function refreshSerialPortsEnhanced() {
 
 let localNetworkIps = [];
 
-function isWildcardListenAddress(address) {
-  return ["0.0.0.0", "127.0.0.1", "localhost", ""].includes(String(address || "").trim());
-}
-
 function updateUdpListenHint() {
   const hint = $("#udpListenHint");
   const list = $("#localIpList");
@@ -3543,7 +3565,7 @@ $("#useAnyUdpAddress")?.addEventListener("click", () => {
 });
 $("#useDetectedUdpAddress")?.addEventListener("click", () => {
   if (!localNetworkIps.length) return showToast("未读取到本机 IP", "可以先使用 0.0.0.0 监听所有网卡");
-  const preferred = localNetworkIps.find((ip) => ip.startsWith("192.168.144.")) || localNetworkIps[0];
+  const preferred = localNetworkIps[0];
   $("#listenAddress").value = preferred;
   updateUdpListenHint();
 });
@@ -3737,9 +3759,9 @@ $("#connectUsbForLogs")?.addEventListener("click", async () => {
         serialPort: port,
         baud,
         listenAddress: $("#listenAddress")?.value || "0.0.0.0",
-        listenPort: Number($("#listenPort")?.value || 19856),
-        targetIp: $("#targetIp")?.value || "192.168.144.12",
-        targetPort: Number($("#targetPort")?.value || 19856)
+        listenPort: Number($("#listenPort")?.value || 14550),
+        targetIp: $("#targetIp")?.value || "127.0.0.1",
+        targetPort: Number($("#targetPort")?.value || 14550)
       })
     });
     $("#usbLogStatus").textContent = `USB 连接已启动：${status.serialPort || port}`;
@@ -4952,12 +4974,32 @@ async function loadAiReportStatus() {
   if (!$("#aiReportStatus")) return;
   try {
     const status = await api("/api/ai-report/status");
+    const modeSelect = $("#aiReportModelMode");
+    if (modeSelect && Array.isArray(status.modes) && status.modes.length) {
+      modeSelect.innerHTML = status.modes.map((mode) => `
+        <option value="${escapeAttribute(mode.mode)}" ${mode.mode === status.mode ? "selected" : ""}>
+          ChatGPT / OpenAI - ${escapeHtml(mode.label || mode.mode)} (${escapeHtml(mode.model || "--")})
+        </option>
+      `).join("");
+      if ([...modeSelect.options].some((option) => option.value === status.mode)) {
+        modeSelect.value = status.mode;
+      }
+    }
     const label = `${status.provider || "openai"} / ${status.model || "--"} / ${status.engine || "openai_chat_completions"}`;
+    const fallbackText = (status.fallback_models || []).length
+      ? `；备用模型：${(status.fallback_models || []).join(" / ")}`
+      : "";
+    const warnings = status.configuration_warnings || [];
     $("#aiReportBadge").textContent = status.available ? "AI 可用" : "AI 未配置";
     $("#aiReportBadge").classList.toggle("active", !!status.available);
     $("#aiReportStatus").textContent = status.available
-      ? `OpenAI 报告引擎已连接：${label}`
-      : "未配置 OpenAI API Key，请在后端 .env 中配置 OPENAI_API_KEY";
+      ? `OpenAI 报告引擎配置完成：${label}${fallbackText}`
+      : "OpenAI 报告引擎未就绪，请检查 .env 中的 OPENAI_API_KEY、AI_REPORT_MODEL 和 AI_REPORT_PROVIDER";
+    if ($("#aiReportNotice")) {
+      $("#aiReportNotice").textContent = warnings.length
+        ? `AI 报告安全边界：只做分析，不控制飞控，不自动改 PID。配置提示：${warnings.join(" ")}`
+        : "AI 报告基于算法分析结果生成，仅用于辅助分析，不能替代人工工程判断；AI 不直接控制飞控，不在飞行中自动修改 PID。";
+    }
   } catch (error) {
     $("#aiReportStatus").textContent = `AI 状态读取失败：${error.message}`;
   }
@@ -5005,9 +5047,10 @@ $("#generateAiReport")?.addEventListener("click", async () => {
 
   try {
     const result = await uploadForm("/api/ai-report/generate", form);
-    $("#aiReportBadge").textContent = "AI 完成";
+    const usedFallback = result.engine === "local_fallback_after_openai_failure" || result.openai_success === false;
+    $("#aiReportBadge").textContent = usedFallback ? "本地回退完成" : "AI 完成";
     $("#aiReportStatus").textContent = result.engine === "local_fallback_after_openai_failure"
-      ? `OpenAI 调用失败，已像 AI 调参一样回退生成报告 · ${result.generated_at || "--"}`
+      ? `OpenAI 调用未完成，但已基于 verified summary 生成可导出的本地工程报告 · ${result.generated_at || "--"}`
       : `AI 报告完成：${result.model || "--"} · ${result.generated_at || "--"}`;
     renderAiReportCards(result);
     $("#aiReportPreview").innerHTML = markdownPreview(result.preview || result.report_markdown || "AI 报告预览为空");
@@ -5019,7 +5062,7 @@ $("#generateAiReport")?.addEventListener("click", async () => {
     $("#downloadAiReportHtml").hidden = !result.files?.htmlUrl;
     renderAiCostPanel("#aiReportCostPanel", result.token_usage, result.usage_summary);
     renderSimilarCases("#aiSimilarCasesPanel", result.similar_cases || result.similarCases);
-    showToast("AI 报告已生成", "可单独导出 AI Word / Markdown / HTML，原算法报告未被覆盖");
+    showToast(usedFallback ? "本地回退报告已生成" : "AI 报告已生成", "可单独导出 Word / Markdown / HTML，原算法报告未被覆盖");
   } catch (error) {
     $("#aiReportBadge").textContent = "AI 失败";
     $("#aiReportStatus").textContent = error.message;
@@ -5887,11 +5930,6 @@ const notificationRows = () => `
   <div class="drawer-row"><span><strong>UAV-08 云台异常</strong><small>建议任务结束后检查俯仰轴电机</small></span><time>14:32</time></div>
   <div class="drawer-row"><span><strong>任务进度已达到 68%</strong><small>A-07 区域剩余 3 个航点</small></span><time>14:25</time></div>
   <div class="drawer-row"><span><strong>真实链路指标已启用</strong><small>侧边栏显示报文新鲜度，不再使用固定延迟数值</small></span><time>系统</time></div>`;
-
-const historyRows = () => `
-  <div class="drawer-row"><span><strong>航线验证 · A-06</strong><small>UAV-03 · 42.6 km · 已完成</small></span><strong class="state-ok">06-17</strong></div>
-  <div class="drawer-row"><span><strong>输电线路复检</strong><small>UAV-08 · 18.2 km · 已完成</small></span><strong class="state-ok">06-16</strong></div>
-  <div class="drawer-row"><span><strong>园区建模任务</strong><small>UAV-03 · 936 张影像 · 已中止</small></span><strong class="state-warn">06-15</strong></div>`;
 
 async function openHistoryDrawer() {
   openDrawer("飞行记录", "MISSION HISTORY", `<div class="drawer-empty">正在读取历史会话...</div>`);

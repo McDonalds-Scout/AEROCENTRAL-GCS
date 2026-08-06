@@ -1,171 +1,178 @@
-# 新电脑快速上手
+# Getting Started
 
-这份文档给第一次接手项目的人使用，目标是从 GitHub 拉下代码后能尽快启动 UI，并知道下一步该验证什么。
+This guide helps a new developer or reviewer clone the project, start the Ground Control Station, and understand the first validation steps.
 
-## 1. 环境准备
+## 1. Environment Requirements
 
-推荐环境：
+Recommended environment:
 
-| 项目 | 要求 |
-|---|---|
-| 操作系统 | Windows 10 / Windows 11 |
-| Python | 3.10 或更高版本 |
-| Git | 可从 GitHub clone / pull / push |
-| 浏览器 | Chrome / Edge |
-| 实机测试 | PX4 / Pixhawk / PX6C 兼容飞控，USB 或 UDP MAVLink |
+| Item | Requirement |
+| --- | --- |
+| Operating system | Windows 10 / Windows 11 |
+| Python | 3.10 or later; 3.11 or 3.12 recommended |
+| Git | Required for clone, pull, commit, and push workflows |
+| Browser | Chrome or Edge for Web development mode |
+| Real-aircraft testing | PX4 / Pixhawk / PX6C compatible flight controller with USB or UDP MAVLink |
 
-Python 可以来自任意一种：
+The startup script can use:
 
-- 项目 `.venv\Scripts\python.exe`
-- Codex 自带 Python
-- 系统安装的 `python`
+- Project virtual environment: `.venv\Scripts\python.exe`
+- Bundled Codex Python runtime, when available
+- System `python`
 - Windows `py` launcher
 
-启动脚本会自动查找这些位置。
-
-## 2. 下载项目
+## 2. Clone the Repository
 
 ```powershell
-git clone https://github.com/McDonalds-Scout/Ground-Station.git
-cd Ground-Station
+git clone https://github.com/McDonalds-Scout/AEROCENTRAL-GCS.git
+cd AEROCENTRAL-GCS
 ```
 
-不要手动复制别人电脑里的 `logs/`、`uploads/`、`reports/`、`.env`。这些是个人本地数据和密钥。
+Do not copy another machine's `logs/`, `uploads/`, `downloads/`, `reports/`, or `.env` files into the public project. These are local runtime data and private configuration.
 
-## 3. 启动 UI
+## 3. Start the Ground Control Station
+
+Recommended startup command:
 
 ```powershell
 .\start-ui.cmd
 ```
 
-成功后会看到：
+The script checks dependencies, cleans stale local background processes, starts the backend, and opens the UI.
 
-```text
-URL: http://127.0.0.1:8080/
-```
-
-浏览器如果没有自动打开，手动访问：
+If the browser does not open automatically, visit:
 
 ```text
 http://127.0.0.1:8080/
 ```
 
-## 4. 如果没有 Python
+## 4. Manual Python Setup
 
-安装 Python 3.10 或更高版本后重新运行：
+If automatic startup fails because Python is missing, install Python 3.10 or later and rerun:
 
 ```powershell
 .\start-ui.cmd
 ```
 
-也可以手动创建虚拟环境：
+Manual virtual environment setup:
 
 ```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\start-ui.cmd
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-## 5. 配置 AI 功能
+## 5. Configure AI Features
 
-AI 调参和 AI 报告需要 `.env`：
+AI PID Advisor and AI Engineering Report generation require a private `.env` file.
+
+Create it from the public example:
 
 ```powershell
 copy .env.example .env
 ```
 
-然后填写：
+Then configure:
 
 ```env
-OPENAI_API_KEY=你的 OpenAI API Key
+AI_PROVIDER=openai
+OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_API_KEY=YOUR_API_KEY_HERE
 ```
 
-没有 Key 时，本地工程规则、UI、MAVLink 连接、算法报告仍可使用；OpenAI 相关功能会失败或回退。
+Without an API key, the local UI, MAVLink connection, deterministic Algorithm Engineering Report, and local engineering rules remain available. OpenAI-dependent features will report configuration errors or use local fallback behavior where implemented.
 
-## 6. 先用演示模式验证
+## 6. Validate with Demo Mode First
 
-第一次运行建议不要直接连接实机：
+For a first run, use Demo mode before connecting real hardware:
 
-1. 打开 UI。
-2. 进入“连接设置”。
-3. 选择“演示模式”。
-4. 点击“开始连接”。
-5. 确认地图、姿态仪、罗盘、HUD、趋势图有数据刷新。
+1. Open the UI.
+2. Go to Connection Settings.
+3. Select Demo mode.
+4. Click Start Connection.
+5. Confirm that the map, attitude indicator, compass, HUD, trend charts, warnings, and MAVLink message panel update.
 
-演示数据不代表真实 GPS 或真实飞机状态。
+Demo data is synthetic and does not represent a real aircraft or real GPS position.
 
-## 7. USB 实机连接
+## 7. USB Hardware Connection
 
-1. 关闭 QGroundControl，避免占用串口。
-2. 使用数据线连接飞控。
-3. 打开“连接设置”。
-4. 选择 USB 串口连接。
-5. 选择正确 COM 口。
-6. 波特率通常使用 `57600` 或 `115200`。
-7. 点击“开始连接”。
+Recommended steps:
 
-确认 UI 中至少能看到：
+1. Close QGroundControl to avoid serial-port contention.
+2. Connect the flight controller by USB.
+3. Open Connection Settings.
+4. Select USB serial connection.
+5. Choose the correct COM port.
+6. Select a baud rate, usually `57600` or `115200`.
+7. Click Start Connection.
 
-- Vehicle heartbeat received
-- target_system / target_component
-- 姿态数据变化
-- STATUSTEXT
-- 电池 / GPS / 飞行模式按飞控实际状态显示
+Confirm that the UI displays:
 
-## 8. UDP 数传连接
+- Vehicle Heartbeat
+- Target system and target component
+- Changing attitude data
+- Battery, GPS, and flight mode based on the actual flight controller state
 
-常见方式：
+## 8. UDP MAVLink Connection
 
-- UI 监听地址：`0.0.0.0`
-- UI 监听端口：`14550`
-- 飞控或数传设备向电脑发送 MAVLink UDP
+Common UDP listener settings:
 
-如果使用目标飞控 IP，请确认电脑和飞控在同一网段，防火墙没有拦截 UDP。
+- UI listen address: `0.0.0.0`
+- UI listen port: `14550`
+- Flight controller or telemetry device sends MAVLink UDP packets to the computer
 
-## 9. 常见问题
+If using a target flight controller IP, confirm that the computer and flight controller are on the same subnet and that the firewall does not block UDP traffic.
 
-### 浏览器打不开
+## 9. Common Issues
 
-先运行：
+### Browser Does Not Open
+
+Run:
 
 ```powershell
-.\cleanup-ui.ps1
 .\start-ui.cmd
 ```
 
-确认终端里显示 `http://127.0.0.1:8080/`。
+Confirm that the terminal prints a local URL such as:
 
-### 依赖安装失败
+```text
+http://127.0.0.1:8080/
+```
 
-检查 Python 和 pip：
+### Dependency Installation Fails
+
+Check Python and pip:
 
 ```powershell
 python --version
 python -m pip --version
 ```
 
-如果公司网络限制 pip，请配置代理或使用公司内网 Python 镜像源。
+If the network blocks Python package downloads, configure a proxy or an internal package mirror.
 
-### 串口连接失败
+### Serial Connection Fails
 
-- 关闭 QGC。
-- 拔插 USB。
-- 刷新 COM 口。
-- 尝试 `57600` 和 `115200`。
-- 查看 Windows 设备管理器里的串口名称。
+Check:
 
-### UI 有数据但命令失败
+- QGroundControl is closed.
+- USB cable is connected.
+- COM port list has been refreshed.
+- `57600` and `115200` have both been tested.
+- Windows Device Manager shows the flight controller serial port.
 
-说明遥测接收可能正常，但命令闭环不一定正常。需要检查：
+### UI Receives Telemetry but Commands Fail
 
-- GCS heartbeat 是否发送。
-- target_system / target_component 是否正确。
-- COMMAND_ACK 是否返回。
-- STATUSTEXT 是否有 PX4 拒绝原因。
-- 当前是否处于实机指令模式。
+Telemetry receive and command acknowledgement are different paths. Check:
 
-## 10. 接手开发前先读
+- GCS Heartbeat is being sent.
+- `target_system` and `target_component` are identified.
+- COMMAND_ACK is returned.
+- STATUSTEXT shows any PX4 rejection reason.
+- The UI is in a mode that allows real-aircraft commands.
 
-- [项目结构说明](PROJECT_STRUCTURE.md)
-- [开发与提交规范](DEVELOPMENT_WORKFLOW.md)
-- [实机测试矩阵](REAL_FLIGHT_TEST_MATRIX.md)
+## 10. Read Before Development
+
+- [Project Structure](PROJECT_STRUCTURE.md)
+- [Development and Contribution Workflow](DEVELOPMENT_WORKFLOW.md)
+- [Real-Flight Test Matrix](REAL_FLIGHT_TEST_MATRIX.md)

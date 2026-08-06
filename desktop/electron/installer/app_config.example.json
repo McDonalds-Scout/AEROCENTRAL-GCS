@@ -1,0 +1,20 @@
+{
+  "backend": {
+    "port": 8080,
+    "readyTimeoutMs": 30000
+  },
+  "mavlink": {
+    "autoConnect": false,
+    "type": "serial",
+    "serialPort": "",
+    "baud": 115200,
+    "listenAddress": "0.0.0.0",
+    "listenPort": 14550,
+    "targetIp": "127.0.0.1",
+    "targetPort": 14550
+  },
+  "window": {
+    "width": 1440,
+    "height": 960
+  }
+}

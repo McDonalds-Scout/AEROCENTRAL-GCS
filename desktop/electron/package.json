@@ -1,0 +1,74 @@
+{
+  "name": "aerocentral-gcs-desktop",
+  "productName": "AeroCentral",
+  "version": "2.0.0",
+  "description": "Desktop shell for the AeroCentral PX4/MAVLink Ground Control Station.",
+  "main": "main.js",
+  "author": "AeroCentral Project",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke-test",
+    "smoke:own": "electron . --smoke-test --force-own-backend",
+    "pack": "electron-builder --dir",
+    "dist:win": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.aerocentral.gcs",
+    "productName": "AeroCentral",
+    "asar": true,
+    "directories": {
+      "output": "../../dist/desktop"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "icons/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist/AEROCENTRAL",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/*.log",
+          "!**/.env"
+        ]
+      },
+      {
+        "from": "installer/app_config.example.json",
+        "to": "app_config.example.json"
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icons/aerocentral.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AeroCentral"
+    }
+  }
+}

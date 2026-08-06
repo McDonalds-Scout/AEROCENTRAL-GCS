@@ -7,9 +7,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import resource_root, runtime_data_root
 
-ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "data"
+
+ROOT = resource_root()
+DATA_DIR = runtime_data_root() / "data"
 USAGE_PATH = DATA_DIR / "token_usage.json"
 PRICING_PATH = ROOT / "config" / "model_pricing.json"
 

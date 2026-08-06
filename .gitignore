@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.env/
 
 # Python cache / virtual environments
 __pycache__/
@@ -48,6 +49,9 @@ downloads/
 uploads/
 *.ulg
 *.ulg.part
+*.bin
+*.tlog
+*.bag
 
 # Generated reports / presentation / document outputs
 reports/
@@ -56,8 +60,16 @@ outputs/
 
 # Local scans / temporary artifacts
 C_Drive_Scan_Reports/
+.tmp_*/
+temp/
+cache/
+*.cache
 *.tmp
 *.bak
+
+# Local private datasets
+data/private/
+data/flight_case_library.local.json
 
 # OS / editor files
 Thumbs.db
@@ -65,3 +77,8 @@ Desktop.ini
 .DS_Store
 .vscode/
 .idea/
+
+# Personal development handoff / local maintenance notes
+CODEX_HANDOFF.md
+Safe-CDriveScan.ps1
+*handoff*.md

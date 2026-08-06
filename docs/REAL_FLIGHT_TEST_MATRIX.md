@@ -1,96 +1,96 @@
-# 壹通无人机地面站实机测试矩阵
+# AeroCentral Real-Flight Test Matrix
 
-本矩阵用于把“界面可见”验证升级为“飞控真实闭环”验证。每一项都必须记录：日期、飞控型号、PX4 版本、连接方式、是否拆桨、操作者、通过/失败、失败 STATUSTEXT、COMMAND_ACK、截图或日志。
+This matrix upgrades validation from "the UI is visible" to "the flight controller command loop is verified." Each test item should record date, flight controller model, PX4 version, connection type, propeller removal status, operator, pass/fail result, failure STATUSTEXT, COMMAND_ACK, screenshots, and logs.
 
-## 0. 测试前安全条件
+## 0. Pre-Test Safety Conditions
 
-| 编号 | 检查项 | 通过标准 | 记录 |
-|---|---|---|---|
-| S-01 | 螺旋桨 | 电机/舵机/解锁/校准测试前必须拆除 |  |
-| S-02 | 飞机状态 | Disarmed，油门最低，安全开关状态明确 |  |
-| S-03 | 电源 | 电池电压正常，USB/数传连接稳定 |  |
-| S-04 | 场地 | 室内校准远离金属和强磁，室外测试有安全区域 |  |
-| S-05 | 回退 | QGC 可用，必要时能立即断开本 UI 并接管 |  |
+| ID | Check Item | Pass Criteria | Record |
+| --- | --- | --- | --- |
+| S-01 | Propellers | Propellers removed before motor, servo, Arm, Disarm, or calibration tests. |  |
+| S-02 | Aircraft state | Disarmed, throttle at minimum, safety switch status known. |  |
+| S-03 | Power | Battery voltage normal; USB or telemetry link stable. |  |
+| S-04 | Test area | Indoor calibration away from metal and magnetic interference; outdoor test area controlled. |  |
+| S-05 | Fallback | QGroundControl available for comparison and emergency takeover if needed. |  |
 
-## 1. 飞控与机型覆盖
+## 1. Aircraft and Flight Controller Coverage
 
-| 编号 | 机型 | 飞控 | 固件 | 连接方式 | 必测模块 |
-|---|---|---|---|---|---|
-| A-01 | 四旋翼 | Pixhawk 6C / PX6C | PX4 当前版本 | USB 串口 | 连接、姿态、RC、Arm、模式、电机测试、校准 |
-| A-02 | 固定翼 | Pixhawk 6C / PX6C | PX4 当前版本 | USB 串口 | 连接、姿态、GPS、空速、舵机测试、Mission |
-| A-03 | 复合翼 | Pixhawk 6C / PX6C | PX4 当前版本 | USB 串口 | VTOL 模式、转换阶段、舵机/电机映射 |
-| A-04 | 四旋翼 | Pixhawk 6C / PX6C | PX4 当前版本 | UDP 数传 | 断联恢复、消息频率、RC、模式、告警 |
-| A-05 | 固定翼 | Pixhawk 6C / PX6C | PX4 当前版本 | UDP 数传 | Mission 上传/下载、空速、地图轨迹 |
+| ID | Aircraft Type | Flight Controller | Firmware | Connection | Required Modules |
+| --- | --- | --- | --- | --- | --- |
+| A-01 | Multicopter | Pixhawk 6C / PX6C | Current PX4 version | USB serial | Connection, attitude, RC, Arm, mode switching, motor test, calibration |
+| A-02 | Fixed-wing | Pixhawk 6C / PX6C | Current PX4 version | USB serial | Connection, attitude, GPS, airspeed, servo test, Mission |
+| A-03 | VTOL | Pixhawk 6C / PX6C | Current PX4 version | USB serial | VTOL mode, transition phases, servo/motor mapping |
+| A-04 | Multicopter | Pixhawk 6C / PX6C | Current PX4 version | UDP telemetry | Link recovery, message frequency, RC, mode switching, alerts |
+| A-05 | Fixed-wing | Pixhawk 6C / PX6C | Current PX4 version | UDP telemetry | Mission upload/download, airspeed, map trajectory |
 
-## 2. 链路稳定性测试
+## 2. Link Stability Tests
 
-| 编号 | 场景 | 操作 | 通过标准 | 关键记录 |
-|---|---|---|---|---|
-| L-01 | USB 正常连接 | 选择串口并连接 | 5 秒内识别 target_system/target_component | HEARTBEAT、target |
-| L-02 | UDP 主动连接 | 使用目标飞控 IP/端口连接 | UI 显示 GCS heartbeat 1 Hz，收到飞控 heartbeat | GCS HB、Vehicle HB |
-| L-03 | UDP 监听 | 监听 0.0.0.0:14550 | 能收到飞控包并识别目标 | 连接状态 |
-| L-04 | 临时拔线 | 连接后拔 USB 5 秒再插回 | UI 显示断联，重连后自动恢复数据 | 断联时间、恢复时间 |
-| L-05 | 数传短断 | 关闭/遮挡数传 5 秒再恢复 | 不崩溃，不重复启动后台，恢复后 target 不乱跳 | connection status |
-| L-06 | 长时间运行 | 静置连接 30 分钟 | 无后台崩溃，消息频率稳定，心跳持续 | CPU、内存、日志 |
-| L-07 | 共享链路 | QGC 与 UI 先后连接同一飞控 | UI 不把 QGC heartbeat 当飞控 target | target_system |
+| ID | Scenario | Operation | Pass Criteria | Key Records |
+| --- | --- | --- | --- | --- |
+| L-01 | Normal USB connection | Select serial port and connect. | `target_system` and `target_component` identified within 5 seconds. | HEARTBEAT, target |
+| L-02 | UDP target connection | Connect using target flight controller IP and port. | UI shows GCS Heartbeat at 1 Hz and receives vehicle Heartbeat. | GCS Heartbeat, Vehicle Heartbeat |
+| L-03 | UDP listener | Listen on `0.0.0.0:14550`. | MAVLink packets are received and the target is identified. | Connection status |
+| L-04 | Short USB disconnect | Disconnect USB for 5 seconds, then reconnect. | UI shows link loss and recovers without crashing. | Loss duration, recovery time |
+| L-05 | Short telemetry loss | Interrupt telemetry for 5 seconds, then restore. | No backend crash, no duplicate connection process, target remains stable. | Connection status |
+| L-06 | Long-duration idle run | Keep connection active for 30 minutes. | Backend remains stable; message frequency and Heartbeat remain consistent. | CPU, memory, logs |
+| L-07 | Shared-link comparison | Connect QGroundControl and AeroCentral sequentially to the same flight controller. | AeroCentral does not classify QGroundControl Heartbeat as the vehicle target. | `target_system` |
 
-## 3. 实时数据显示测试
+## 3. Real-Time Telemetry Tests
 
-| 编号 | 数据 | MAVLink 来源 | 操作 | 通过标准 |
-|---|---|---|---|---|
-| T-01 | 姿态仪 | ATTITUDE | 手动转动飞控 | Roll/Pitch/Yaw 低延迟变化 |
-| T-02 | 罗盘 | ATTITUDE / GLOBAL_POSITION_INT / VFR_HUD | 转动飞控航向 | 航向连续变化，无明显跳变 |
-| T-03 | 地速 | VFR_HUD / GLOBAL_POSITION_INT | 室外移动或仿真移动 | 地速实时变化 |
-| T-04 | 高度 | GLOBAL_POSITION_INT / VFR_HUD | 抬高/仿真爬升 | 高度变化清晰 |
-| T-05 | 空速 | VFR_HUD / 空速传感器 | 固定翼空速管连接 | 无空速时显示 N/A，不显示假值 |
-| T-06 | 电池 | SYS_STATUS / BATTERY_STATUS | 接电池 | 电压、电流、电量真实 |
-| T-07 | GPS | GPS_RAW_INT / GLOBAL_POSITION_INT | 室外定位 | fix、卫星、经纬度真实 |
-| T-08 | 告警 | STATUSTEXT | 触发飞前检查失败 | 告警中心显示原文和中文说明 |
+| ID | Data | MAVLink Source | Operation | Pass Criteria |
+| --- | --- | --- | --- | --- |
+| T-01 | Attitude indicator | ATTITUDE | Move the flight controller by hand. | Roll, Pitch, and Yaw update with low latency. |
+| T-02 | Compass | ATTITUDE / GLOBAL_POSITION_INT / VFR_HUD | Rotate the flight controller. | Heading changes continuously without incorrect wrap artifacts. |
+| T-03 | Ground speed | VFR_HUD / GLOBAL_POSITION_INT | Move outdoors or use simulation. | Ground speed changes in real time. |
+| T-04 | Altitude | GLOBAL_POSITION_INT / VFR_HUD | Raise the aircraft or simulate climb. | Altitude changes clearly. |
+| T-05 | Airspeed | VFR_HUD / airspeed sensor | Connect fixed-wing airspeed sensor. | Shows real airspeed when available; shows N/A when unavailable. |
+| T-06 | Battery | SYS_STATUS / BATTERY_STATUS | Connect battery. | Voltage, current, and remaining capacity reflect real data. |
+| T-07 | GPS | GPS_RAW_INT / GLOBAL_POSITION_INT | Test outdoors with GPS lock. | Fix type, satellites, latitude, and longitude are real. |
+| T-08 | Warnings | STATUSTEXT | Trigger a preflight failure. | Warning center shows original PX4 text and local explanation. |
 
-## 4. 命令闭环测试
+## 4. Command Closed-Loop Tests
 
-| 编号 | 命令 | 操作 | 通过标准 | 失败时必须显示 |
-|---|---|---|---|---|
-| C-01 | 请求参数 | 点击请求参数列表 | 返回 PARAM_VALUE，缺失项列出 | 超时/缺失参数 |
-| C-02 | Arm | 拆桨后二次确认解锁 | 显示 COMMAND_ACK，HEARTBEAT armed 状态变化 | MAV_RESULT、STATUSTEXT |
-| C-03 | Disarm | 解锁后上锁 | 显示 COMMAND_ACK，HEARTBEAT disarmed | MAV_RESULT、STATUSTEXT |
-| C-04 | 模式 MANUAL | 点击手动模式 | ACK 或 HEARTBEAT mode 回读确认 | 拒绝原因 |
-| C-05 | 模式 POSCTL | 点击 Position | 模式正确切换 | GPS/RC/传感器原因 |
-| C-06 | 模式 ALTCTL | 点击高度模式 | 模式正确切换 | 拒绝原因 |
-| C-07 | 模式 LAND | 点击降落模式 | 模式命令被确认 | 拒绝原因 |
-| C-08 | 模式 MISSION | 有任务后点击任务模式 | 模式切入 AUTO.MISSION | 无任务/未定位原因 |
-| C-09 | 舵机测试 | 拆桨后测试每路输出 | 对应舵机单独动作，ACK 明确 | unsupported/denied |
-| C-10 | 电机测试 | 拆桨后测试每路电机 | 对应电机动作，ACK 明确 | safety/unsupported |
-| C-11 | 陀螺仪校准 | 静止并确认 | ACK ACCEPTED，STATUSTEXT 进度/完成 | Preflight Fail |
-| C-12 | 加速度计校准 | 按六面提示操作 | PX4 提示和进度可见 | 当前姿态/移动失败原因 |
-| C-13 | 磁罗盘校准 | 远离金属旋转 | MAG_CAL_PROGRESS/REPORT 可见 | 无罗盘/磁干扰 |
-| C-14 | 空速校准 | 空速管静止 | ACK/STATUSTEXT 可见 | 空速无效 |
+| ID | Command | Operation | Pass Criteria | Failure Display Must Include |
+| --- | --- | --- | --- | --- |
+| C-01 | Request parameters | Click parameter list request. | PARAM_VALUE data returned; missing items listed. | Timeout or missing parameter details |
+| C-02 | Arm | Confirm propellers removed, then Arm. | COMMAND_ACK shown and HEARTBEAT armed state changes. | MAV_RESULT and STATUSTEXT |
+| C-03 | Disarm | Disarm after Arm. | COMMAND_ACK shown and HEARTBEAT disarmed state changes. | MAV_RESULT and STATUSTEXT |
+| C-04 | MANUAL mode | Click Manual mode. | ACK or HEARTBEAT mode read-back confirms mode. | Rejection reason |
+| C-05 | POSCTL mode | Click Position mode. | Mode changes correctly. | GPS, RC, or sensor reason |
+| C-06 | ALTCTL mode | Click Altitude mode. | Mode changes correctly. | Rejection reason |
+| C-07 | LAND mode | Click Land mode. | Mode command is acknowledged. | Rejection reason |
+| C-08 | MISSION mode | Click Mission mode after mission upload. | AUTO.MISSION mode is entered when mission and positioning are valid. | No mission or no position reason |
+| C-09 | Servo test | Test each output with propellers removed. | Expected servo moves independently and ACK is visible. | Unsupported or denied reason |
+| C-10 | Motor test | Test each motor with propellers removed. | Expected motor responds and ACK is visible. | Safety or unsupported reason |
+| C-11 | Gyro calibration | Keep aircraft still and confirm. | ACK ACCEPTED and STATUSTEXT progress/completion shown. | Preflight failure reason |
+| C-12 | Accelerometer calibration | Follow six-orientation prompts. | PX4 prompts and progress are visible. | Orientation or movement failure reason |
+| C-13 | Magnetometer calibration | Rotate aircraft away from metal objects. | MAG_CAL_PROGRESS / MAG_CAL_REPORT visible when supported. | Missing compass or magnetic interference reason |
+| C-14 | Airspeed calibration | Keep airspeed sensor still. | ACK and STATUSTEXT visible. | Invalid airspeed reason |
 
-## 5. Mission GCS 测试
+## 5. Mission GCS Tests
 
-| 编号 | 流程 | 通过标准 |
-|---|---|---|
-| M-01 | 读取飞控任务 | 收到 MISSION_COUNT，并逐项读出 MISSION_ITEM_INT/ITEM |
-| M-02 | 清空任务 | 收到 MISSION_ACK ACCEPTED |
-| M-03 | 上传 3 点任务 | COUNT -> REQUEST -> ITEM -> ACK 完整闭环 |
-| M-04 | 上传带 TAKEOFF/LAND 任务 | 命令类型正确，航点数量正确 |
-| M-05 | 上传失败重试 | REQUEST 超时后能重发，不会卡死 |
-| M-06 | 上传后回读校验 | 回读任务与 UI 航点一致 |
-| M-07 | Mission 模式切换 | 有任务且定位正常时可切入任务模式 |
-| M-08 | 任务进度显示 | 当前航点/总航点可见 |
+| ID | Flow | Pass Criteria |
+| --- | --- | --- |
+| M-01 | Read mission from flight controller | Receives MISSION_COUNT and each MISSION_ITEM_INT / MISSION_ITEM. |
+| M-02 | Clear mission | Receives MISSION_ACK ACCEPTED. |
+| M-03 | Upload 3-waypoint mission | COUNT -> REQUEST -> ITEM -> ACK sequence completes. |
+| M-04 | Upload mission with TAKEOFF and LAND | Command types and waypoint count are correct. |
+| M-05 | Upload retry after timeout | REQUEST timeout triggers retry without freezing. |
+| M-06 | Read-back verification after upload | Read-back mission matches UI waypoint plan. |
+| M-07 | Mission mode switching | Mission mode can be entered when mission and position are valid. |
+| M-08 | Mission progress display | Current waypoint and total waypoint count are visible. |
 
-## 6. 报告与日志测试
+## 6. Report and Log Tests
 
-| 编号 | 功能 | 通过标准 |
-|---|---|---|
-| R-01 | USB 下载 ULG | 下载不断开连接，可断点续传 |
-| R-02 | 算法报告 | 使用 verified_summary，不产生旧误报 |
-| R-03 | AI 报告 | OpenAI 失败时回退说明清楚，不覆盖算法报告 |
-| R-04 | 固定翼日志 | 识别固定翼，阶段不出现悬停/旋翼起降 |
-| R-05 | 复合翼日志 | 阶段包含旋翼起飞、前转换、巡航、后转换、旋翼降落 |
+| ID | Function | Pass Criteria |
+| --- | --- | --- |
+| R-01 | USB ULog download | Download does not disconnect the flight controller and supports resumable behavior where implemented. |
+| R-02 | Algorithm Engineering Report | Uses `verified_summary` and does not generate known stale false positives. |
+| R-03 | AI Engineering Report | OpenAI failure is explained clearly and does not overwrite the Algorithm Engineering Report. |
+| R-04 | Fixed-wing log | Identifies fixed-wing operation and avoids hover or rotor takeoff/landing phase labels. |
+| R-05 | VTOL log | Includes rotor takeoff, front transition, cruise, back transition, and rotor landing when evidence supports those phases. |
 
-## 7. 验收结论记录
+## 7. Acceptance Record
 
-| 日期 | 飞控/机型 | 连接 | 通过项 | 失败项 | 阻塞原因 | 下一步 |
-|---|---|---|---|---|---|---|
+| Date | Flight Controller / Aircraft | Connection | Passed Items | Failed Items | Blocking Reason | Next Step |
+| --- | --- | --- | --- | --- | --- | --- |
 |  |  |  |  |  |  |  |

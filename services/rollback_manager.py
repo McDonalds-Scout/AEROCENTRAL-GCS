@@ -6,9 +6,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import runtime_data_path
 
-ROOT = Path(__file__).resolve().parents[1]
-HISTORY_PATH = ROOT / "logs" / "pid_parameter_rollbacks.json"
+
+HISTORY_PATH = runtime_data_path("logs", "pid_parameter_rollbacks.json")
 
 
 def _read_history(path: Path = HISTORY_PATH) -> list[dict[str, Any]]:

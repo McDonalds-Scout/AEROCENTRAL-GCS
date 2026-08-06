@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import runtime_data_root
 
-ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "data"
+
+DATA_DIR = runtime_data_root() / "data"
 CASE_PATH = DATA_DIR / "flight_case_library.json"
 
 

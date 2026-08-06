@@ -6,8 +6,10 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from core.runtime_paths import resource_root
 
-ROOT = Path(__file__).resolve().parents[1]
+
+ROOT = resource_root()
 BUILD_TIME = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 VERSION_FILES = ("index.html", "app.js", "styles.css")
 
@@ -62,7 +64,7 @@ def git_commit() -> str:
 def version_payload() -> dict:
     version = os.environ.get("GCS_VERSION", "").strip() or frontend_hash()
     return {
-        "app": "Yitong UAV Ground Station",
+        "app": "AEROCENTRAL Ground Control Station",
         "version": version,
         "buildTime": BUILD_TIME,
         "gitCommit": git_commit(),

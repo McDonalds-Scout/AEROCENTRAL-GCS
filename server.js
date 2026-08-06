@@ -61,7 +61,7 @@ function versionPayload() {
   } catch (_) {}
   const version = process.env.GCS_VERSION || frontendHash();
   return {
-    app: "Tianxun UAV Ground Station",
+    app: "AEROCENTRAL Ground Control Station",
     version,
     buildTime: bootTime,
     gitCommit,

@@ -39,6 +39,76 @@ def safe_text(value: Any, limit: int = 500) -> str:
     return text[:limit]
 
 
+def _replace_all(text: str, replacements: dict[str, str]) -> tuple[str, list[str]]:
+    notes = []
+    for source, target in replacements.items():
+        if source in text:
+            text = text.replace(source, target)
+            notes.append(source)
+    return text, notes
+
+
+def sanitize_ai_report_markdown(markdown: str, summary: dict[str, Any]) -> tuple[str, list[str]]:
+    """Deterministically weaken conclusions that violate verified-summary limits."""
+    notes: list[str] = []
+    battery = summary.get("battery_metrics") or {}
+    if battery.get("current_reliable") is False:
+        markdown, changed = _replace_all(markdown, {
+            "动力负载过大": "动力负载结论证据不足",
+            "电机负载过大": "电机负载结论证据不足",
+            "动力系统负载过大": "动力系统负载结论证据不足",
+            "动力负载异常": "动力负载需结合电流可信度人工复核",
+            "电机负载异常": "电机负载需结合电流可信度人工复核",
+        })
+        if changed:
+            notes.append("电流不可信时已弱化动力/电机负载强结论")
+
+    markdown, changed = _replace_all(markdown, {
+        "航向变化幅度 360": "航向角可能存在 wrap，不能按真实 360 度变化判断",
+        "航向实际范围 360": "航向角可能存在 wrap，不能按真实 360 度范围判断",
+        "yaw range 360": "yaw wrap trend, not real 360 degree oscillation",
+        "360° 振荡": "航向角 wrap 趋势参考",
+        "360°振荡": "航向角 wrap 趋势参考",
+        "360度振荡": "航向角 wrap 趋势参考",
+        "360 度振荡": "航向角 wrap 趋势参考",
+    })
+    if changed:
+        notes.append("已将航向 wrap 相关强结论改为趋势参考")
+
+    if "Armed by RC" in markdown:
+        markdown, changed = _replace_all(markdown, {
+            "遥控链路异常": "遥控操作事件需结合链路状态人工复核",
+            "遥控链路故障": "遥控操作事件需结合链路状态人工复核",
+            "RC 故障": "RC 操作事件，不能仅凭 Armed by RC 判定故障",
+            "RC故障": "RC 操作事件，不能仅凭 Armed by RC 判定故障",
+            "RC fault": "RC operation event, not a confirmed fault",
+            "链路故障": "链路状态需结合 RC_CHANNELS/STATUSTEXT 人工复核",
+        })
+        if changed:
+            notes.append("已防止 Armed by RC 被写成遥控链路故障")
+
+    markdown, changed = _replace_all(markdown, {
+        "PID 是根因": "PID 只能作为候选因素",
+        "PID为根因": "PID 只能作为候选因素",
+        "PID是根因": "PID 只能作为候选因素",
+        "PID 确定为根因": "PID 只能作为候选因素",
+    })
+    if changed:
+        notes.append("已将 PID 确定根因改为候选因素")
+
+    for event in summary.get("battery_events") or []:
+        if event.get("event_type") != "voltage_trend":
+            continue
+        markdown, changed = _replace_all(markdown, {
+            "电压下降趋势为高风险": "电压下降趋势仅作为趋势观察项",
+            "电压下降趋势属于高风险": "电压下降趋势仅作为趋势观察项",
+        })
+        if changed:
+            notes.append("已将 voltage_trend 高风险表述改为趋势观察")
+            break
+    return markdown, notes
+
+
 def strip_for_ai(value: Any) -> Any:
     if isinstance(value, dict):
         result = {}
@@ -179,7 +249,9 @@ def normalize_ai_report(raw: dict[str, Any], summary: dict[str, Any], model: str
     markdown = safe_text(raw.get("report_markdown") or raw.get("reportMarkdown"), 70000)
     if len(markdown) < 200:
         raise ValueError("AI 返回内容过短，未形成有效报告")
+    markdown, sanitize_notes = sanitize_ai_report_markdown(markdown, summary)
     warnings = [safe_text(item, 260) for item in clamp_list(raw.get("warnings"), 20)]
+    warnings.extend(f"本地可信度校验已修正 AI 表述：{note}" for note in sanitize_notes)
     missing = summary.get("missing_data") or []
     safety = safe_text(raw.get("safety_note"), 1000) or (
         "AI 报告基于算法分析结果生成，仅用于辅助分析，不能替代人工工程判断；"
