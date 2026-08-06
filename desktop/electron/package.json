@@ -5,6 +5,7 @@
   "description": "Desktop shell for the AeroCentral PX4/MAVLink Ground Control Station.",
   "main": "main.js",
   "author": "AeroCentral Project",
+  "license": "Apache-2.0",
   "private": true,
   "scripts": {
     "start": "electron .",
