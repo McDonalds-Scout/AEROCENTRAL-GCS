@@ -9,6 +9,8 @@ const RC_SETUP_REFRESH_INTERVAL_MS = 50;
 const MAP_VISUAL_UPDATE_INTERVAL_MS = 500;
 const MAP_AUTO_FOLLOW_INTERVAL_MS = 1200;
 const CHART_REDRAW_INTERVAL_MS = 1000;
+const LIVE_NUMERIC_COMMIT_INTERVAL_MS = 50;
+const TELEMETRY_OFFLINE_GRACE_MS = 2500;
 const OPERATOR_NAME_KEY = "uav-gcs-operator-name";
 const MAX_ALERT_HISTORY = 80;
 let activePageName = "overview";
@@ -16,6 +18,36 @@ let telemetryTransportMode = "boot";
 const DEV_TOOLS_KEY = "uav-gcs-dev-tools";
 const DEV_TOOLS_ENABLED = resolveDevToolsEnabled();
 document.documentElement.classList.toggle("dev-tools-enabled", DEV_TOOLS_ENABLED);
+
+function resolveNode(target) {
+  return typeof target === "string" ? $(target) : target;
+}
+
+function setTextIfChanged(target, value) {
+  const node = resolveNode(target);
+  if (!node) return false;
+  const text = value === null || value === undefined ? "" : String(value);
+  if (node.textContent === text) return false;
+  node.textContent = text;
+  return true;
+}
+
+function setHtmlIfChanged(target, value) {
+  const node = resolveNode(target);
+  if (!node) return false;
+  const html = value === null || value === undefined ? "" : String(value);
+  if (node.innerHTML === html) return false;
+  node.innerHTML = html;
+  return true;
+}
+
+function setExclusiveStateClass(target, states, state) {
+  const node = resolveNode(target);
+  if (!node) return;
+  if (node.classList.contains(state) && states.every((item) => item === state || !node.classList.contains(item))) return;
+  node.classList.remove(...states);
+  node.classList.add(state);
+}
 
 const clock = $("#clock");
 const formatTime = (date) => new Intl.DateTimeFormat("zh-CN", {
@@ -419,7 +451,7 @@ function showPage(name) {
   const target = $(`#${name}Page`);
   if (target) target.classList.add("active");
   window.scrollTo({ top: 0, behavior: "smooth" });
-  if (name === "mission") initializeMissionMap();
+  if (name === "mission") activateMissionPlanner();
   if (name === "risk") renderRiskPage();
   if (name === "feasibility") renderFeasibilityPage();
   if (name === "geofence") {
@@ -834,8 +866,7 @@ function installFlightOperationsLayout() {
 }
 
 function setTopFlightText(id, value) {
-  const node = $(`#${id}`);
-  if (node) node.textContent = value;
+  setTextIfChanged(`#${id}`, value);
 }
 
 function updateTopFlightStatusBar(data = {}, online = false) {
@@ -878,23 +909,22 @@ function updateFlightModePanel(data = {}, online = false) {
 
   const isRealCommand = currentOperationMode === "real_command";
   const mode = data.mode || "UNKNOWN";
-  if (current) current.textContent = online ? mode : "UNKNOWN";
+  setTextIfChanged(current, online ? mode : "UNKNOWN");
   if (armed) {
-    armed.textContent = online ? (data.armed ? "已解锁" : "未解锁") : "未连接";
+    setTextIfChanged(armed, online ? (data.armed ? "已解锁" : "未解锁") : "未连接");
     armed.classList.toggle("armed", !!online && !!data.armed);
     armed.classList.toggle("disarmed", !!online && !data.armed);
   }
   if (state) {
-    state.classList.remove("online", "warn", "offline");
     if (!online) {
-      state.textContent = "等待连接";
-      state.classList.add("offline");
+      setTextIfChanged(state, "等待连接");
+      setExclusiveStateClass(state, ["online", "warn", "offline"], "offline");
     } else if (isRealCommand) {
-      state.textContent = "实机可用";
-      state.classList.add("online");
+      setTextIfChanged(state, "实机可用");
+      setExclusiveStateClass(state, ["online", "warn", "offline"], "online");
     } else {
-      state.textContent = "安全拦截";
-      state.classList.add("warn");
+      setTextIfChanged(state, "安全拦截");
+      setExclusiveStateClass(state, ["online", "warn", "offline"], "warn");
     }
   }
   panel?.classList.toggle("offline", !online);
@@ -969,11 +999,11 @@ function updateTopThrottle(data = {}) {
   const source = $("#topThrottleSource");
   const host = $("#topThrottleStatus");
   const valid = Number.isFinite(percent);
-  if (value) value.textContent = valid ? `${Math.round(percent)}%` : "--%";
+  setTextIfChanged(value, valid ? `${Math.round(percent)}%` : "--%");
   if (source) {
-    source.textContent = valid
+    setTextIfChanged(source, valid
       ? `${pwm || "--"} us · ${data.rcThrottleSource || "RC_MAP_THROTTLE"}`
-      : "等待 RC_MAP/RC";
+      : "等待 RC_MAP/RC");
   }
   if (host) host.classList.toggle("offline", !valid);
 }
@@ -986,7 +1016,7 @@ function updateArmButtonState(data = {}) {
   button.classList.toggle("armed", armed);
   button.classList.toggle("locked", !armed);
   button.dataset.armTarget = armed ? "disarm" : "arm";
-  label.textContent = armed ? "上锁飞机" : "解锁飞机";
+  setTextIfChanged(label, armed ? "上锁飞机" : "解锁飞机");
   const connected = !!(data.connected || data.heartbeat);
   button.disabled = !connected;
   button.title = connected
@@ -1019,13 +1049,13 @@ function renderRcLinkStatus(rcLink = {}, prefix = "rc") {
     panel.classList.remove("green", "yellow", "red", "grey");
     panel.classList.add(level);
   }
-  if (title) title.textContent = rcLink.rc_status_text || "Unknown";
+  setTextIfChanged(title, rcLink.rc_status_text || "Unknown");
   if (quality) {
-    quality.textContent = rcLink.rc_signal_quality || "unknown";
+    setTextIfChanged(quality, rcLink.rc_signal_quality || "unknown");
     quality.className = `rc-link-pill ${level}`;
   }
   if (grid) {
-    grid.innerHTML = [
+    setHtmlIfChanged(grid, [
       ["RC Status", rcLink.rc_status_text || "Unknown"],
       ["RSSI", rcLink.rc_rssi_percent === null || rcLink.rc_rssi_percent === undefined ? "N/A" : `${fmtRcValue(rcLink.rc_rssi_percent, "%")} (${rcLink.rc_rssi_raw ?? "raw N/A"})`],
       ["Update Rate", rcLink.rc_update_rate_hz === null || rcLink.rc_update_rate_hz === undefined ? "N/A" : `${fmtRcValue(rcLink.rc_update_rate_hz, " Hz")}`],
@@ -1034,25 +1064,25 @@ function renderRcLinkStatus(rcLink = {}, prefix = "rc") {
       ["Failsafe", rcLink.failsafe?.rc_lost ? "Yes" : rcLink.rc_status === "unknown" ? "Unknown" : "No"],
       ["Throttle Low", rcLink.throttle_low === null || rcLink.throttle_low === undefined ? "Unknown" : rcLink.throttle_low ? "Yes" : "No"],
       ["Manual Control", rcLink.manual_control_available ? "Available" : "N/A"],
-    ].map(([label, value]) => `<div class="rc-link-card"><small>${label}</small><strong>${value}</strong></div>`).join("");
+    ].map(([label, value]) => `<div class="rc-link-card"><small>${label}</small><strong>${value}</strong></div>`).join(""));
   }
   if (meta) {
     const warnings = Array.isArray(rcLink.warnings) ? rcLink.warnings : [];
-    meta.innerHTML = warnings.length
+    setHtmlIfChanged(meta, warnings.length
       ? warnings.map((item) => `<p>${escapeAttribute(item)}</p>`).join("")
-      : "<p>RC 状态等待数据。</p>";
+      : "<p>RC 状态等待数据。</p>");
   }
 }
 
 function renderRcSourceStrip(rcLink = {}, data = {}) {
   const host = $("#rcSourceStrip");
   if (!host) return;
-  host.innerHTML = [
+  setHtmlIfChanged(host, [
     ["当前 RC 数据来源", rcLink.rc_source || "unavailable"],
     ["当前 RC_MAP 参数状态", rcLink.rc_map_status || (data.rcMapAvailable ? "received" : "unavailable")],
     ["当前通道映射是否可信", rcLink.mapping_confidence || "no"],
     ["active fixed profile", rcLink.activeFixedProfile || "default"],
-  ].map(([label, value]) => `<span><small>${label}</small><strong>${value}</strong></span>`).join("");
+  ].map(([label, value]) => `<span><small>${label}</small><strong>${value}</strong></span>`).join(""));
 }
 
 function renderPerformanceDiagnostic(data = {}) {
@@ -1061,7 +1091,7 @@ function renderPerformanceDiagnostic(data = {}) {
   const stats = normalizeMessageStats(data.messageStats || data.connection?.messageStats || {});
   const rcLink = data.rcLink || {};
   const telemetryAge = data.receivedAt ? Date.now() - Number(data.receivedAt) : null;
-  host.innerHTML = [
+  setHtmlIfChanged(host, [
     ["MAVLink message rate", `${fmtRcValue(data.rateHz ?? data.connection?.rateHz ?? 0, " Hz")}`],
     ["WebSocket publish rate", "fixed internal"],
     ["frontend FPS", "browser controlled"],
@@ -1070,7 +1100,7 @@ function renderPerformanceDiagnostic(data = {}) {
     ["RC update rate", rcLink.rc_update_rate_hz === null || rcLink.rc_update_rate_hz === undefined ? "N/A" : `${fmtRcValue(rcLink.rc_update_rate_hz, " Hz")}`],
     ["active fixed profile", rcLink.activeFixedProfile || "default"],
     ["RC_CHANNELS rate", stats.rates?.RC_CHANNELS ? `${fmtRcValue(stats.rates.RC_CHANNELS, " Hz")}` : "N/A"],
-  ].map(([label, value]) => `<span><small>${label}</small><strong>${value}</strong></span>`).join("");
+  ].map(([label, value]) => `<span><small>${label}</small><strong>${value}</strong></span>`).join(""));
 }
 
 let aircraftCalibrationOverview = null;
@@ -1988,6 +2018,8 @@ let gpsMap = null;
 let activeMapLayer = null;
 let uavMarker = null;
 let flightTrack = null;
+let overviewMissionLine = null;
+let overviewMissionMarkers = null;
 let latestPosition = null;
 let firstGpsFix = true;
 let lastTelemetryAt = 0;
@@ -2027,6 +2059,14 @@ function initializeGpsMap() {
   }
   gpsMap = L.map("gpsMap", { zoomControl: false }).setView([31.2304, 121.4737], 12);
   activeMapLayer = mapLayers["卫星"].addTo(gpsMap);
+  overviewMissionLine = L.polyline([], {
+    color: "#f2b84b",
+    weight: 3,
+    opacity: 0.95,
+    lineCap: "round",
+    lineJoin: "round"
+  }).addTo(gpsMap);
+  overviewMissionMarkers = L.layerGroup().addTo(gpsMap);
   flightTrack = L.polyline([], { color: "#24c9d9", weight: 3, opacity: .9 }).addTo(gpsMap);
   setTimeout(() => gpsMap.invalidateSize(), 100);
 }
@@ -2045,10 +2085,76 @@ function getUavMapIcon() {
   return cachedUavIcon;
 }
 
-function updateUavMarkerHeading(heading) {
-  const markerElement = uavMarker?.getElement?.();
+function updateMapMarkerHeading(marker, heading) {
+  const markerElement = marker?.getElement?.();
   const markerBody = markerElement?.querySelector?.(".uav-map-marker");
   if (markerBody) markerBody.style.setProperty("--heading", `${heading}deg`);
+}
+
+function updateUavMarkerHeading(heading) {
+  updateMapMarkerHeading(uavMarker, heading);
+}
+
+function missionCommandText(command = "") {
+  const key = String(command || "WAYPOINT").toUpperCase();
+  return {
+    TAKEOFF: "起飞",
+    WAYPOINT: "航点",
+    LOITER: "盘旋",
+    LAND: "降落",
+    RTL: "返航"
+  }[key] || key;
+}
+
+function missionCommandShort(command = "") {
+  const key = String(command || "WAYPOINT").toUpperCase();
+  return {
+    TAKEOFF: "TO",
+    WAYPOINT: "WP",
+    LOITER: "LT",
+    LAND: "LD",
+    RTL: "RTL"
+  }[key] || "WP";
+}
+
+function getMissionWaypointIcon(index, command) {
+  if (!window.L) return null;
+  const commandKey = String(command || "WAYPOINT").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  return L.divIcon({
+    className: "mission-waypoint-map-icon",
+    html: `<div class="mission-waypoint-marker ${commandKey}"><span>${index + 1}</span><small>${missionCommandShort(command)}</small></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17]
+  });
+}
+
+function renderOverviewMissionRoute(options = {}) {
+  if (!gpsMap || !window.L || !overviewMissionLine || !overviewMissionMarkers) return;
+  const route = waypoints
+    .filter((point) => finite(point.lat) && finite(point.lon))
+    .map((point) => ({ ...point, lat: Number(point.lat), lon: Number(point.lon) }));
+
+  overviewMissionLine.setLatLngs(route.map((point) => [point.lat, point.lon]));
+  overviewMissionMarkers.clearLayers();
+
+  route.forEach((point, index) => {
+    const marker = L.marker([point.lat, point.lon], {
+      icon: getMissionWaypointIcon(index, point.command),
+      zIndexOffset: 650
+    }).addTo(overviewMissionMarkers);
+    const altitude = finite(point.altitude) ? `${Number(point.altitude).toFixed(0)} m` : "-- m";
+    marker.bindTooltip(`${index + 1} · ${missionCommandText(point.command)} · ${altitude}`, {
+      permanent: false,
+      direction: "top",
+      className: "mission-waypoint-tooltip",
+      offset: [0, -12]
+    });
+  });
+
+  if (options.fit && route.length) {
+    const bounds = L.latLngBounds(route.map((point) => [point.lat, point.lon]));
+    if (bounds.isValid()) gpsMap.fitBounds(bounds.pad(0.22), { animate: false });
+  }
 }
 
 $$(".segmented button").forEach((button) => {
@@ -2119,6 +2225,7 @@ let lastHeavyTelemetryUiAt = 0;
 let lastChartUiAt = 0;
 let lastDiagnosticTelemetryUiAt = 0;
 let lastReadinessTelemetryUiAt = 0;
+let lastLiveTelemetryTextAt = 0;
 let flightDisplayDom = null;
 let realtimeInstrumentDriver = null;
 const smoothInstrumentStats = {
@@ -2269,14 +2376,12 @@ requestAnimationFrame(renderAttitudeFrame);
 function setTrend(id, text, state = "neutral") {
   const node = $(`#${id}`);
   if (!node) return;
-  node.textContent = text;
-  node.classList.remove("up", "down", "neutral");
-  node.classList.add(state);
+  setTextIfChanged(node, text);
+  setExclusiveStateClass(node, ["up", "down", "neutral"], state);
 }
 
 function setText(id, text) {
-  const node = $(`#${id}`);
-  if (node) node.textContent = text;
+  setTextIfChanged(`#${id}`, text);
 }
 
 function updateSignalBars(state = "offline") {
@@ -2351,13 +2456,11 @@ function updateRealMetricFooters(data, altitude, speed) {
 function setReadinessCard(id, state) {
   const card = $(id);
   if (!card) return;
-  card.classList.remove("online", "warn", "offline");
-  card.classList.add(state);
+  setExclusiveStateClass(card, ["online", "warn", "offline"], state);
 }
 
 function setReadinessText(id, value) {
-  const target = $(id);
-  if (target) target.textContent = value;
+  setTextIfChanged(id, value);
 }
 
 function formatLinkAge(seconds) {
@@ -2412,13 +2515,11 @@ function updateFlightReadiness(data = {}, online = true) {
 function setSystemLight(id, state) {
   const light = $(`#${id}`);
   if (!light) return;
-  light.classList.remove("ok", "warm", "bad");
-  light.classList.add(state);
+  setExclusiveStateClass(light, ["ok", "warm", "bad"], state);
 }
 
 function setSystemText(id, text) {
-  const node = $(`#${id}`);
-  if (node) node.textContent = text;
+  setTextIfChanged(`#${id}`, text);
 }
 
 function updateSystemsPanel(data, online = true) {
@@ -2812,6 +2913,10 @@ function refreshConnectionSelfCheckIfVisible() {
 
 function updateTelemetry(data) {
   if (!data || data.stale || data.connected === false) {
+    const packetAgeMs = finite(data?.ageSeconds) ? Number(data.ageSeconds) * 1000 : null;
+    const recentLivePacket = lastTelemetryAt && Date.now() - lastTelemetryAt < TELEMETRY_OFFLINE_GRACE_MS;
+    const transientOffline = recentLivePacket && (packetAgeMs === null || packetAgeMs < TELEMETRY_OFFLINE_GRACE_MS);
+    if (transientOffline) return;
     setTelemetryOffline(data?.stale ? "MAVLink 数据超时" : "未连接");
     return;
   }
@@ -2821,6 +2926,7 @@ function updateTelemetry(data) {
   const heavyDue = nowMs - lastHeavyTelemetryUiAt >= 250;
   const readinessDue = nowMs - lastReadinessTelemetryUiAt >= 500;
   const diagnosticDue = nowMs - lastDiagnosticTelemetryUiAt >= 1000;
+  const liveTextDue = nowMs - lastLiveTelemetryTextAt >= LIVE_NUMERIC_COMMIT_INTERVAL_MS;
   const chartDue = nowMs - lastChartUiAt >= CHART_REDRAW_INTERVAL_MS;
   const mapDue = nowMs - lastMapVisualAt >= MAP_VISUAL_UPDATE_INTERVAL_MS;
   renderMissionProgress(data);
@@ -2862,20 +2968,20 @@ function updateTelemetry(data) {
   const demoPrefix = currentOperationMode === "demo" || vehicleId.startsWith("DEMO")
     ? "演示模式：非真实 GPS · " : "";
   if (heavyDue) {
-    $("#telemetryState").textContent = `${demoPrefix}PX4 在线 · ${vehicleId} · ${flightState}${modeText}`;
+    setTextIfChanged("#telemetryState", `${demoPrefix}PX4 在线 · ${vehicleId} · ${flightState}${modeText}`);
     $("#telemetryState").classList.remove("offline");
     $("#telemetryState").classList.add("online");
-    if ($("#hudStatus")) $("#hudStatus").textContent = `${vehicleId} · PX4 在线`;
-    if ($("#hudMode")) $("#hudMode").textContent = data.mode || "UNKNOWN";
+    setTextIfChanged("#hudStatus", `${vehicleId} · PX4 在线`);
+    setTextIfChanged("#hudMode", data.mode || "UNKNOWN");
     updateFlightModeButtons(data.mode);
     updateFlightModePanel(data, true);
     if ($("#flightModeCommandState") && !$("#flightModeCommandState").textContent.includes("正在请求")) {
-      $("#flightModeCommandState").textContent = currentOperationMode === "real_command"
+      setTextIfChanged("#flightModeCommandState", currentOperationMode === "real_command"
         ? "实机指令模式：可切换飞控实际模式"
-        : "当前非实机指令模式，模式切换会被安全层拦截";
+        : "当前非实机指令模式，模式切换会被安全层拦截");
     }
     if ($("#hudArmed")) {
-      $("#hudArmed").textContent = flightState;
+      setTextIfChanged("#hudArmed", flightState);
       $("#hudArmed").classList.toggle("armed", !!data.armed);
       $("#hudArmed").classList.toggle("locked", !data.armed);
     }
@@ -2886,44 +2992,49 @@ function updateTelemetry(data) {
   }
   updateAttitude(data);
 
-  if ($("#altitude")) $("#altitude").textContent = altitude !== null ? altitude.toFixed(1) : "--";
-  if (speed !== null && !attitudeRender.initialized) $("#speed").textContent = formatLiveSpeed(speed);
-  if ($("#hudAltitude")) $("#hudAltitude").textContent = altitude !== null ? altitude.toFixed(1) : "--";
-  if ($("#hudGroundSpeed") && speed === null) $("#hudGroundSpeed").textContent = "--";
-  if (airspeed !== null) {
-    const displayedAirspeed = Math.max(0, airspeed);
-    $("#airspeed").textContent = displayedAirspeed.toFixed(1);
-    $("#airspeedState").textContent = airspeed < -0.3 ? "空速管需校零" : displayedAirspeed > 0.5 ? "空速管在线" : "低空速";
-    if ($("#hudAirspeed")) $("#hudAirspeed").textContent = displayedAirspeed.toFixed(1);
-    if ($("#hudAirspeedState")) $("#hudAirspeedState").textContent = $("#airspeedState").textContent;
-  } else {
-    $("#airspeed").textContent = "--";
-    $("#airspeedState").textContent = "等待空速管";
-    if ($("#hudAirspeed")) $("#hudAirspeed").textContent = "--";
-    if ($("#hudAirspeedState")) $("#hudAirspeedState").textContent = "等待空速管";
+  if (liveTextDue) {
+    lastLiveTelemetryTextAt = nowMs;
+    setTextIfChanged("#altitude", altitude !== null ? altitude.toFixed(1) : "--");
+    if (speed !== null && !attitudeRender.initialized) setTextIfChanged("#speed", formatLiveSpeed(speed));
+    setTextIfChanged("#hudAltitude", altitude !== null ? altitude.toFixed(1) : "--");
+    if (speed === null) setTextIfChanged("#hudGroundSpeed", "--");
+    if (airspeed !== null) {
+      const displayedAirspeed = Math.max(0, airspeed);
+      const airspeedState = airspeed < -0.3 ? "空速管需校零" : displayedAirspeed > 0.5 ? "空速管在线" : "低空速";
+      setTextIfChanged("#airspeed", displayedAirspeed.toFixed(1));
+      setTextIfChanged("#airspeedState", airspeedState);
+      setTextIfChanged("#hudAirspeed", displayedAirspeed.toFixed(1));
+      setTextIfChanged("#hudAirspeedState", airspeedState);
+    } else {
+      setTextIfChanged("#airspeed", "--");
+      setTextIfChanged("#airspeedState", "等待空速管");
+      setTextIfChanged("#hudAirspeed", "--");
+      setTextIfChanged("#hudAirspeedState", "等待空速管");
+    }
   }
   if (heavyDue) {
-    if (finite(data.battery)) $("#battery").textContent = Math.round(Number(data.battery));
-    if (finite(data.satellites)) $("#satellites").textContent = Math.round(Number(data.satellites));
-    if (finite(data.rssi)) $("#signal").textContent = Math.round(Number(data.rssi));
-    if ($("#hudBattery")) $("#hudBattery").textContent = finite(data.battery) ? Math.round(Number(data.battery)) : "--";
+    if (finite(data.battery)) setTextIfChanged("#battery", Math.round(Number(data.battery)));
+    if (finite(data.satellites)) setTextIfChanged("#satellites", Math.round(Number(data.satellites)));
+    if (finite(data.rssi)) setTextIfChanged("#signal", Math.round(Number(data.rssi)));
+    setTextIfChanged("#hudBattery", finite(data.battery) ? Math.round(Number(data.battery)) : "--");
   }
 
   if (!hasCoordinates || !hasGpsFix) {
     if (heavyDue) {
       const satellites = finite(data.satellites) ? Math.round(Number(data.satellites)) : "--";
       const fixType = finite(data.fixType) ? Number(data.fixType) : 0;
-      $("#coordinateText").textContent = `GPS 未定位 · ${satellites} 颗卫星 · Fix ${fixType}`;
-      if ($("#hudFix")) $("#hudFix").textContent = `Fix ${fixType} · ${satellites} 星`;
-      if ($("#hudCoordinate")) $("#hudCoordinate").textContent = "--";
-      if ($("#mapLat")) $("#mapLat").textContent = "--";
-      if ($("#mapLon")) $("#mapLon").textContent = "--";
-      if ($("#mapHeading")) $("#mapHeading").textContent = `${String(Math.round(heading)).padStart(3, "0")}°`;
-      if ($("#mapAltitude")) $("#mapAltitude").textContent = altitude !== null ? `${altitude.toFixed(1)} m` : "-- m";
+      setTextIfChanged("#coordinateText", `GPS 未定位 · ${satellites} 颗卫星 · Fix ${fixType}`);
+      setTextIfChanged("#hudFix", `Fix ${fixType} · ${satellites} 星`);
+      setTextIfChanged("#hudCoordinate", "--");
+      setTextIfChanged("#mapLat", "--");
+      setTextIfChanged("#mapLon", "--");
+      setTextIfChanged("#mapHeading", `${String(Math.round(heading)).padStart(3, "0")}°`);
+      setTextIfChanged("#mapAltitude", altitude !== null ? `${altitude.toFixed(1)} m` : "-- m");
       $("#mapWaiting").classList.remove("hidden");
-      $("#mapWaiting strong").textContent = "PX6C 已连接，等待 GPS 定位";
-      $("#mapWaiting small").textContent = "请将 GPS 天线移至室外开阔区域";
+      setTextIfChanged("#mapWaiting strong", "PX6C 已连接，等待 GPS 定位");
+      setTextIfChanged("#mapWaiting small", "请将 GPS 天线移至室外开阔区域");
     }
+    if (missionMap && heavyDue) updateMissionVehicleLayer(data);
     if (heavyDue && $("#riskPage")?.classList.contains("active")) renderRiskPage();
     if (chartDue && chartDirty && typeof drawChart === "function") {
       lastChartUiAt = nowMs;
@@ -2936,19 +3047,20 @@ function updateTelemetry(data) {
   const lon = Number(data.lon);
   latestPosition = [lat, lon];
   if (heavyDue) {
-    $("#coordinateText").textContent = `${lat.toFixed(6)}°, ${lon.toFixed(6)}°`;
+    setTextIfChanged("#coordinateText", `${lat.toFixed(6)}°, ${lon.toFixed(6)}°`);
     if ($("#hudFix")) {
       const satellites = finite(data.satellites) ? Math.round(Number(data.satellites)) : "--";
       const fixType = finite(data.fixType) ? Number(data.fixType) : "--";
-      $("#hudFix").textContent = `Fix ${fixType} · ${satellites} 星`;
+      setTextIfChanged("#hudFix", `Fix ${fixType} · ${satellites} 星`);
     }
-    if ($("#hudCoordinate")) $("#hudCoordinate").textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-    if ($("#mapLat")) $("#mapLat").textContent = lat.toFixed(6);
-    if ($("#mapLon")) $("#mapLon").textContent = lon.toFixed(6);
-    if ($("#mapHeading")) $("#mapHeading").textContent = `${String(Math.round(heading)).padStart(3, "0")}°`;
-    if ($("#mapAltitude")) $("#mapAltitude").textContent = altitude !== null ? `${altitude.toFixed(1)} m` : "-- m";
+    setTextIfChanged("#hudCoordinate", `${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+    setTextIfChanged("#mapLat", lat.toFixed(6));
+    setTextIfChanged("#mapLon", lon.toFixed(6));
+    setTextIfChanged("#mapHeading", `${String(Math.round(heading)).padStart(3, "0")}°`);
+    setTextIfChanged("#mapAltitude", altitude !== null ? `${altitude.toFixed(1)} m` : "-- m");
     $("#mapWaiting").classList.add("hidden");
   }
+  if (missionMap && mapDue) updateMissionVehicleLayer(data);
 
   if (gpsMap && mapDue) {
     lastMapVisualAt = nowMs;
@@ -3130,6 +3242,7 @@ let telemetryFrameScheduled = false;
 
 function handleTelemetryPacket(data) {
   if (!data || !data.vehicleId) {
+    if (lastTelemetryAt && Date.now() - lastTelemetryAt < TELEMETRY_OFFLINE_GRACE_MS) return;
     setTelemetryOffline("未连接");
     pollTelemetry.lastReceivedAt = null;
     pollTelemetry.lastPacketKey = null;
@@ -3231,12 +3344,23 @@ async function readJsonResponse(response, fallbackMessage = "请求失败") {
   let data = {};
   try {
     data = text ? JSON.parse(text) : {};
-  } catch (_) {
-    const snippet = text.trim().slice(0, 180);
-    const isHtml = snippet.startsWith("<!DOCTYPE") || snippet.startsWith("<html") || snippet.startsWith("<");
-    throw new Error(isHtml
-      ? "当前地址返回的是网页，不是后端 JSON 接口。请确认使用 start-ui.cmd 启动 Python 后端，并访问 http://127.0.0.1:8080/"
-      : `后端返回非 JSON 内容：${snippet || "空响应"}`);
+  } catch (parseError) {
+    data = null;
+    const sanitized = text.replace(/(:|,|\[)\s*(NaN|-?Infinity)(?=\s*[,}\]])/g, "$1 null");
+    if (sanitized !== text) {
+      try {
+        data = JSON.parse(sanitized);
+      } catch (_) {
+        data = null;
+      }
+    }
+    if (data === null) {
+      const snippet = text.trim().slice(0, 180);
+      const isHtml = snippet.startsWith("<!DOCTYPE") || snippet.startsWith("<html") || snippet.startsWith("<");
+      throw new Error(isHtml
+        ? "当前地址返回的是网页，不是后端 JSON 接口。请确认使用 start-ui.cmd 启动 Python 后端，并访问 http://127.0.0.1:8080/"
+        : `后端返回非 JSON 内容：${snippet || "空响应"}`);
+    }
   }
   if (!response.ok) throw new Error(data.error || data.message || fallbackMessage);
   return data;
@@ -3529,7 +3653,7 @@ function updateUdpListenHint() {
   const localText = localNetworkIps.length ? localNetworkIps.join(" / ") : "未读取到本机 IPv4";
   if (list) list.textContent = `本机 IP：${localText}`;
   hint.classList.remove("warning");
-  hint.textContent = `WiFi UDP 连接会主动连接目标飞控；UDP 监听模式只监听本机端口。本机 IP 参考：${localText}。`;
+  hint.textContent = `WiFi UDP 连接会先监听本机端口，再主动向目标飞控发送 GCS 心跳。目标飞控 IP 填飞机/数传地址，本机监听地址一般填 0.0.0.0；本机 IP 参考：${localText}。`;
   return true;
 }
 
@@ -5227,16 +5351,174 @@ refreshSafetyState();
 
 let missionMap = null;
 let missionLine = null;
+let missionBaseLayer = null;
+let missionUavMarker = null;
+let missionTrackLine = null;
+let missionHomeMarker = null;
+let missionLastMarkerLabel = "";
+let missionLoadedFromBackend = false;
+const missionTrackPoints = [];
 const waypoints = [];
+
+function updateMissionMapStatus(title, detail = "", visible = true) {
+  const status = $("#missionMapStatus");
+  if (!status) return;
+  setTextIfChanged($("strong", status), title);
+  setTextIfChanged($("small", status), detail);
+  status.classList.toggle("hidden", !visible);
+}
+
+function missionMapCenter() {
+  if (latestPosition) return latestPosition;
+  if (finite(latestTelemetry?.lat) && finite(latestTelemetry?.lon)) {
+    return [Number(latestTelemetry.lat), Number(latestTelemetry.lon)];
+  }
+  return [31.2304, 121.4737];
+}
+
+function refreshMissionMapSize(delay = 80) {
+  if (!missionMap) return;
+  window.setTimeout(() => {
+    missionMap.invalidateSize({ animate: false });
+    if (waypoints.length) {
+      const bounds = L.latLngBounds(waypoints.map((point) => [point.lat, point.lon]));
+      if (bounds.isValid()) missionMap.fitBounds(bounds.pad(0.25), { animate: false });
+    }
+  }, delay);
+}
+
+function missionTelemetryPosition(data = latestTelemetry || {}) {
+  const lat = finite(data.lat) ? Number(data.lat) : Array.isArray(latestPosition) ? Number(latestPosition[0]) : null;
+  const lon = finite(data.lon) ? Number(data.lon) : Array.isArray(latestPosition) ? Number(latestPosition[1]) : null;
+  const fixType = finite(data.fixType) ? Number(data.fixType) : null;
+  const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0;
+  const hasGpsFix = fixType === null || fixType >= 3;
+  return { lat, lon, fixType, hasCoordinates, hasGpsFix };
+}
+
+function updateMissionVehicleLayer(data = latestTelemetry || {}, options = {}) {
+  if (!missionMap || !window.L) return;
+  const position = missionTelemetryPosition(data);
+  if (!position.hasCoordinates || !position.hasGpsFix) {
+    if ($("#missionPage")?.classList.contains("active")) {
+      const sats = finite(data.satellites) ? Math.round(Number(data.satellites)) : "--";
+      updateMissionMapStatus("等待飞机 GPS 定位", `任务规划需要真实定位；当前 Fix ${position.fixType ?? "--"}，卫星 ${sats}。`, true);
+    }
+    return;
+  }
+
+  const latLng = [position.lat, position.lon];
+  const heading = finite(data.heading) ? Number(data.heading) : finite(data.yaw) ? Number(data.yaw) : 0;
+  const altitude = finite(data.relativeAlt) ? Number(data.relativeAlt) : finite(data.alt) ? Number(data.alt) : null;
+  const speed = finite(data.speed) ? Number(data.speed) : null;
+  const vehicleId = data.vehicleId || "UAV";
+  const label = `${vehicleId} · ${altitude !== null ? altitude.toFixed(1) + " m" : "-- m"} · ${speed !== null ? speed.toFixed(1) + " m/s" : "-- m/s"}`;
+
+  if (!missionTrackLine) {
+    missionTrackLine = L.polyline([], {
+      color: "#f2b84b",
+      weight: 2,
+      opacity: 0.9,
+      dashArray: "6 7"
+    }).addTo(missionMap);
+  }
+  const lastPoint = missionTrackPoints.at(-1);
+  const moved = !lastPoint || Math.abs(lastPoint[0] - position.lat) > 0.000001 || Math.abs(lastPoint[1] - position.lon) > 0.000001;
+  if (moved) {
+    missionTrackPoints.push(latLng);
+    if (missionTrackPoints.length > 1500) missionTrackPoints.shift();
+    missionTrackLine.setLatLngs(missionTrackPoints);
+  }
+
+  if (!missionUavMarker) {
+    missionUavMarker = L.marker(latLng, { icon: getUavMapIcon(), zIndexOffset: 1000 }).addTo(missionMap);
+    missionUavMarker.bindTooltip(label, {
+      permanent: true,
+      direction: "right",
+      className: "uav-tooltip",
+      offset: [14, 0]
+    });
+  } else {
+    missionUavMarker.setLatLng(latLng);
+    if (label !== missionLastMarkerLabel) missionUavMarker.setTooltipContent(label);
+  }
+  missionLastMarkerLabel = label;
+  updateMapMarkerHeading(missionUavMarker, heading);
+
+  if (data.home_position && finite(data.home_position.latitude) && finite(data.home_position.longitude)) {
+    const homePoint = [Number(data.home_position.latitude), Number(data.home_position.longitude)];
+    if (!missionHomeMarker) {
+      missionHomeMarker = L.circleMarker(homePoint, {
+        radius: 8,
+        color: "#f2b84b",
+        fillColor: "#342c1c",
+        fillOpacity: 1,
+        weight: 2
+      }).addTo(missionMap).bindTooltip("Home 点", { permanent: false });
+    } else {
+      missionHomeMarker.setLatLng(homePoint);
+    }
+  }
+
+  if (options.center || (options.initial && !waypoints.length)) {
+    missionMap.setView(latLng, Math.max(missionMap.getZoom(), 16), { animate: false });
+  }
+  if ($("#missionPage")?.classList.contains("active")) {
+    updateMissionMapStatus("任务地图已连接飞机", "卫星底图、飞机位置、航向和实际轨迹正在显示。", false);
+  }
+}
+
+function activateMissionPlanner() {
+  initializeMissionMap();
+  refreshMissionMapSize(80);
+  refreshMissionMapSize(320);
+  updateMissionVehicleLayer(latestTelemetry, { initial: true });
+  loadSavedMissionFromBackend();
+}
+
 function initializeMissionMap() {
-  if (missionMap || !window.L) return;
-  missionMap = L.map("missionMap").setView([31.2304, 121.4737], 14);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors", maxZoom: 19
-  }).addTo(missionMap);
+  if (missionMap) {
+    refreshMissionMapSize(40);
+    return;
+  }
+  if (!window.L) {
+    updateMissionMapStatus("任务地图组件未加载", "请强制刷新软件，或检查 vendor/leaflet 文件是否存在。", true);
+    return;
+  }
+  updateMissionMapStatus("任务地图加载中", "正在加载卫星底图，航点功能即将可用。", true);
+  missionMap = L.map("missionMap", { zoomControl: true }).setView(missionMapCenter(), latestPosition ? 16 : 14);
+  missionBaseLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { attribution: "Tiles © Esri", maxZoom: 19 }
+  );
+  missionBaseLayer.on("load", () => updateMissionMapStatus("任务地图已加载", "点击地图添加航点，拖动航点调整位置。", false));
+  missionBaseLayer.on("tileerror", () => {
+    updateMissionMapStatus("底图瓦片加载较慢", "网络底图暂不可用时仍可添加航点；建议检查网络或稍后刷新。", true);
+  });
+  missionBaseLayer.addTo(missionMap);
   missionLine = L.polyline([], { color: "#24c9d9", weight: 3 }).addTo(missionMap);
   missionMap.on("click", (event) => addWaypoint(event.latlng.lat, event.latlng.lng));
-  setTimeout(() => missionMap.invalidateSize(), 120);
+  updateMissionVehicleLayer(latestTelemetry, { initial: true });
+  refreshMissionMapSize(120);
+  refreshMissionMapSize(500);
+}
+
+async function loadSavedMissionFromBackend() {
+  if (missionLoadedFromBackend || waypoints.length) return;
+  missionLoadedFromBackend = true;
+  try {
+    const saved = await api("/api/mission");
+    const items = Array.isArray(saved) ? saved : Array.isArray(saved?.waypoints) ? saved.waypoints : [];
+    if (!items.length) return;
+    initializeMissionMap();
+    rebuildWaypoints(items);
+    missionOverview.status = "已加载本地航线";
+    updateMissionOverview();
+    setTextIfChanged("#missionValidation", `已加载本地保存的 ${items.length} 个航点，请执行上传前检查。`);
+    refreshMissionMapSize(120);
+  } catch (_) {
+    missionLoadedFromBackend = false;
+  }
 }
 function addWaypoint(lat, lon, command = null) {
   const waypoint = {
@@ -5266,6 +5548,7 @@ function renderWaypoints() {
       <td><button class="table-action delete-waypoint">×</button></td>
     </tr>`).join("");
   if (missionLine) missionLine.setLatLngs(waypoints.map((point) => [point.lat, point.lon]));
+  renderOverviewMissionRoute();
   updateRouteEstimate();
   if ($("#feasibilityPage")?.classList.contains("active")) renderFeasibilityPage();
   if ($("#geofencePage")?.classList.contains("active")) renderGeofencePage();
@@ -5299,6 +5582,17 @@ function clearAllWaypoints() {
 $("#clearWaypoints").addEventListener("click", clearAllWaypoints);
 function serializedWaypoints() {
   return waypoints.map(({ marker, ...point }) => point);
+}
+
+function serializedPx4MissionWaypoints() {
+  return waypoints.map(({ marker, speed, ...point }) => {
+    const command = String(point.command || "WAYPOINT").toUpperCase();
+    return {
+      ...point,
+      command,
+      hold: Number(point.hold) || 0,
+    };
+  });
 }
 
 function haversineMeters(a, b) {
@@ -5416,6 +5710,13 @@ function buildMissionTemplate(type) {
     { command: "WAYPOINT", north: 480, east: -380, altitude: 80, speed: 14, hold: 0 },
     { command: "LAND", north: 80, east: -80, altitude: 20, speed: 11, hold: 0 },
   ];
+  const multirotor = [
+    { command: "TAKEOFF", north: 0, east: 0, altitude: 30, speed: 4, hold: 0 },
+    { command: "WAYPOINT", north: 80, east: 0, altitude: 35, speed: 5, hold: 0 },
+    { command: "WAYPOINT", north: 80, east: 80, altitude: 35, speed: 5, hold: 0 },
+    { command: "WAYPOINT", north: 0, east: 80, altitude: 35, speed: 5, hold: 0 },
+    { command: "LAND", north: 0, east: 0, altitude: 0, speed: 3, hold: 0 },
+  ];
   const compoundVtol = [
     { command: "TAKEOFF", north: 0, east: 0, altitude: 30, speed: 5, hold: 0 },
     { command: "WAYPOINT", north: 160, east: 60, altitude: 60, speed: 8, hold: 0 },
@@ -5424,7 +5725,7 @@ function buildMissionTemplate(type) {
     { command: "WAYPOINT", north: 220, east: -120, altitude: 55, speed: 8, hold: 0 },
     { command: "LAND", north: 20, east: 20, altitude: 15, speed: 4, hold: 0 },
   ];
-  const profile = type === "compound_vtol" ? compoundVtol : fixedWing;
+  const profile = type === "compound_vtol" ? compoundVtol : type === "multirotor" ? multirotor : fixedWing;
   return profile.map((item) => {
     const point = offsetMetersToLatLon(origin, item.north, item.east);
     return {
@@ -5441,7 +5742,7 @@ function buildMissionTemplate(type) {
 function applyMissionTemplate(type) {
   initializeMissionMap();
   if (waypoints.length && !window.confirm("当前已有航点，是否用模板覆盖当前任务规划？")) return;
-  const label = type === "compound_vtol" ? "复合翼任务模板" : "固定翼任务模板";
+  const label = type === "compound_vtol" ? "复合翼任务模板" : type === "multirotor" ? "四旋翼任务模板" : "固定翼任务模板";
   rebuildWaypoints(buildMissionTemplate(type));
   const first = waypoints[0];
   if (first && missionMap) missionMap.setView([first.lat, first.lon], 15);
@@ -5595,6 +5896,7 @@ $("#addRtlPoint").addEventListener("click", () => {
   if (!point) return showToast("无法添加返航", "请先添加航点或收到 GPS 定位");
   addWaypoint(point.lat, point.lon, "RTL");
 });
+$("#applyMultirotorTemplate")?.addEventListener("click", () => applyMissionTemplate("multirotor"));
 $("#applyFixedWingTemplate")?.addEventListener("click", () => applyMissionTemplate("fixed_wing"));
 $("#applyVtolTemplate")?.addEventListener("click", () => applyMissionTemplate("compound_vtol"));
 $("#importMissionFile").addEventListener("change", async () => {
@@ -5620,14 +5922,15 @@ $("#checkMission").addEventListener("click", async () => {
 });
 $("#uploadMission").addEventListener("click", async () => {
   if (!window.confirm("确认将当前任务上传到真实飞控？")) return;
+  const uploadWaypoints = serializedPx4MissionWaypoints();
   missionOverview.status = "等待上传服务";
   updateMissionOverview();
-  $("#missionValidation").textContent = "正在上传 Mission 到飞控...";
+  $("#missionValidation").textContent = "正在上传 PX4/QGC 兼容 Mission 到飞控，后端会按当前机型自动选择上传方案...";
   try {
     await api("/api/mission", { method: "POST", body: JSON.stringify({ waypoints: serializedWaypoints() }) });
     const response = await api("/api/mission/upload", {
       method: "POST",
-      body: JSON.stringify({ waypoints: serializedWaypoints(), clearExisting: true })
+      body: JSON.stringify({ waypoints: uploadWaypoints, clearExisting: true })
     });
     if (!response.accepted) {
       missionOverview.status = "上传被阻止";
@@ -6249,4 +6552,3 @@ document.addEventListener("click", async (event) => {
     showToast("日志分析失败", error.message);
   }
 }, true);
-

@@ -128,6 +128,8 @@ class FakeMaster:
         self.target_component = 1
         self._messages = list(messages or [])
         self.closed = False
+        self.clients = set()
+        self.clients_last_alive = {}
 
     def recv_match(self, *args, **kwargs):
         if not self._messages:
@@ -261,6 +263,29 @@ class CommunicationRefactorTests(unittest.TestCase):
         self.assertEqual(master.target_component, 3)
         self.assertEqual(heartbeat.get_srcSystem(), 2)
 
+    def test_connection_manager_seeds_udp_target_for_udpin_heartbeat(self):
+        created = {}
+
+        def factory(connection, **kwargs):
+            created["connection"] = connection
+            return FakeMaster()
+
+        def wait(master, connection, timeout):
+            created["clients"] = set(master.clients)
+            return FakeHeartbeat(system=9, component=10)
+
+        master, _heartbeat = connection_manager.connect(
+            "udpin:0.0.0.0:19856",
+            57600,
+            connection_factory=factory,
+            heartbeat_waiter=wait,
+            udp_target="192.0.2.12:14550",
+        )
+
+        self.assertEqual(created["connection"], "udpin:0.0.0.0:19856")
+        self.assertIn(("192.0.2.12", 14550), created["clients"])
+        self.assertEqual(getattr(master, "_codex_udp_target"), ("192.0.2.12", 14550))
+
     def test_connection_manager_serial_connection_uses_same_factory_contract(self):
         calls = []
 
@@ -317,9 +342,10 @@ class CommunicationRefactorTests(unittest.TestCase):
         original_connect = px6c_connector.connection_manager.connect
         master = FakeMaster()
 
-        def fake_connect(connection, baud, source_system=255, source_component=None):
+        def fake_connect(connection, baud, source_system=255, source_component=None, udp_target=None):
             self.assertEqual(connection, "COM12")
             self.assertEqual(baud, 57600)
+            self.assertIsNone(udp_target)
             master.target_system = 5
             master.target_component = 6
             return master, FakeHeartbeat(system=5, component=6)

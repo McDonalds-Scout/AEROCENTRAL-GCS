@@ -79,7 +79,7 @@ def send_gcs_heartbeat(master: Any, state: dict[str, Any] | None = None, force: 
 
 def wait_for_vehicle_heartbeat(master: Any, connection: str, timeout: float = 30.0) -> Any | None:
     """Wait for a vehicle heartbeat, keeping UDP links awake with GCS heartbeats."""
-    active_udp = str(connection or "").startswith(("udpout:", "udp:"))
+    active_udp = str(connection or "").startswith(("udpout:", "udpin:", "udp:", "udpbcast:"))
     deadline = time.monotonic() + timeout
     last_ping = 0.0
     while time.monotonic() < deadline:

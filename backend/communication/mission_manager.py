@@ -15,6 +15,10 @@ from backend.communication.message_bus import MessageBus, wait_for_message
 
 MAV_MISSION_ACCEPTED = getattr(mavutil.mavlink, "MAV_MISSION_ACCEPTED", 0)
 MAV_MISSION_TYPE_MISSION = getattr(mavutil.mavlink, "MAV_MISSION_TYPE_MISSION", 0)
+MAV_MISSION_UNSUPPORTED_RESULTS = {
+    getattr(mavutil.mavlink, "MAV_MISSION_UNSUPPORTED_FRAME", 2),
+    getattr(mavutil.mavlink, "MAV_MISSION_UNSUPPORTED", 3),
+}
 
 MISSION_COMMANDS = {
     "TAKEOFF": getattr(mavutil.mavlink, "MAV_CMD_NAV_TAKEOFF", 22),
@@ -23,6 +27,31 @@ MISSION_COMMANDS = {
     "LAND": getattr(mavutil.mavlink, "MAV_CMD_NAV_LAND", 21),
     "RTL": getattr(mavutil.mavlink, "MAV_CMD_NAV_RETURN_TO_LAUNCH", 20),
     "DO_CHANGE_SPEED": getattr(mavutil.mavlink, "MAV_CMD_DO_CHANGE_SPEED", 178),
+}
+
+FRAME_GLOBAL_RELATIVE_ALT = getattr(mavutil.mavlink, "MAV_FRAME_GLOBAL_RELATIVE_ALT", 3)
+FRAME_MISSION = getattr(mavutil.mavlink, "MAV_FRAME_MISSION", 2)
+
+FIXED_WING_TYPES = {
+    getattr(mavutil.mavlink, "MAV_TYPE_FIXED_WING", 1),
+}
+MULTICOPTER_TYPES = {
+    getattr(mavutil.mavlink, "MAV_TYPE_QUADROTOR", 2),
+    getattr(mavutil.mavlink, "MAV_TYPE_COAXIAL", 3),
+    getattr(mavutil.mavlink, "MAV_TYPE_HELICOPTER", 4),
+    getattr(mavutil.mavlink, "MAV_TYPE_TRICOPTER", 15),
+    getattr(mavutil.mavlink, "MAV_TYPE_HEXAROTOR", 13),
+    getattr(mavutil.mavlink, "MAV_TYPE_OCTOROTOR", 14),
+    getattr(mavutil.mavlink, "MAV_TYPE_DODECAROTOR", 19),
+}
+VTOL_TYPES = {
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_DUOROTOR", 20),
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_QUADROTOR", 21),
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_TILTROTOR", 22),
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_RESERVED2", 23),
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_RESERVED3", 24),
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_RESERVED4", 25),
+    getattr(mavutil.mavlink, "MAV_TYPE_VTOL_RESERVED5", 26),
 }
 
 
@@ -50,6 +79,38 @@ def mission_ack_text(ack_type: int) -> str:
 
 def _commands(mission_commands: dict[str, int] | None = None) -> dict[str, int]:
     return mission_commands or MISSION_COMMANDS
+
+
+def _safe_int(value: Any, default: int = -1) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def vehicle_mission_profile(master: Any) -> dict[str, Any]:
+    vehicle_type = _safe_int(
+        getattr(master, "_codex_vehicle_type", getattr(master, "vehicle_type", -1)),
+        -1,
+    )
+    if vehicle_type in FIXED_WING_TYPES:
+        profile = "fixed_wing"
+        label = "Fixed-wing"
+    elif vehicle_type in VTOL_TYPES:
+        profile = "vtol"
+        label = "VTOL"
+    elif vehicle_type in MULTICOPTER_TYPES:
+        profile = "multicopter"
+        label = "Multicopter"
+    else:
+        profile = "generic"
+        label = "Generic PX4"
+    return {
+        "profile": profile,
+        "label": label,
+        "vehicleType": vehicle_type if vehicle_type >= 0 else None,
+        "source": "vehicle_heartbeat" if vehicle_type >= 0 else "unknown",
+    }
 
 
 def send_mission_clear_all(master: Any, mission_type: int = MAV_MISSION_TYPE_MISSION) -> None:
@@ -124,7 +185,10 @@ def mission_item_payload(
     commands = _commands(mission_commands)
     command_name = str(item.get("command", "WAYPOINT")).upper()
     command = commands.get(command_name, commands["WAYPOINT"])
-    frame = getattr(mavutil.mavlink, "MAV_FRAME_GLOBAL_RELATIVE_ALT_INT", 6)
+    # QGroundControl keeps editable mission frames as GLOBAL_RELATIVE_ALT and
+    # still sends MISSION_ITEM_INT with lat/lon scaled by 1e7. PX4 accepts this
+    # path broadly across firmware versions.
+    frame = FRAME_GLOBAL_RELATIVE_ALT
     lat = float(item.get("lat", 0) or 0)
     lon = float(item.get("lon", 0) or 0)
     altitude = float(item.get("altitude", 0) or 0)
@@ -134,20 +198,22 @@ def mission_item_payload(
     param3 = 0
     param4 = float("nan")
     if command_name == "DO_CHANGE_SPEED":
-        frame = getattr(mavutil.mavlink, "MAV_FRAME_MISSION", 2)
+        frame = FRAME_MISSION
         param1 = 1
         param2 = float(item.get("speed", 0) or 0)
         param3 = -1
         param4 = 0
         lat = lon = altitude = 0
     if command_name == "RTL":
+        frame = FRAME_MISSION
+        param4 = 0
         lat = lon = altitude = 0
     return {
         "seq": int(seq),
         "frame": frame,
         "command": int(command),
         "current": 1 if seq == 0 else 0,
-        "autocontinue": 1 if seq < total - 1 else 0,
+        "autocontinue": 1,
         "param1": param1,
         "param2": param2,
         "param3": param3,
@@ -160,16 +226,120 @@ def mission_item_payload(
 
 
 def expand_mission_upload_items(waypoints: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    expanded = []
-    last_speed = None
-    for item in waypoints:
-        command_name = str(item.get("command", "WAYPOINT")).upper()
-        speed = float(item.get("speed", 0) or 0)
-        if speed > 0 and command_name not in {"RTL"} and speed != last_speed:
-            expanded.append({"command": "DO_CHANGE_SPEED", "speed": speed})
-            last_speed = speed
-        expanded.append(item)
-    return expanded
+    # Do not inject DO_CHANGE_SPEED during real PX4 mission upload. Several PX4
+    # builds reject mixed DO/NAV uploads with MAV_MISSION_UNSUPPORTED. Keep
+    # speed in the UI only until a per-airframe compatibility table exists.
+    return [dict(item) for item in waypoints]
+
+
+def _mission_item_summary(items: list[dict[str, Any]], mission_commands: dict[str, int] | None = None) -> list[dict[str, Any]]:
+    return [
+        {
+            "seq": index,
+            "command": str(item.get("command", "WAYPOINT")).upper(),
+            "payload": mission_item_payload(item, index, len(items), mission_commands=mission_commands),
+        }
+        for index, item in enumerate(items)
+    ]
+
+
+def _replace_terminal_rtl_with_land(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    converted = [dict(item) for item in items]
+    for index in range(len(converted) - 1, -1, -1):
+        if str(converted[index].get("command", "WAYPOINT")).upper() == "RTL":
+            landing = dict(converted[index])
+            previous = converted[index - 1] if index > 0 else landing
+            landing["command"] = "LAND"
+            landing["lat"] = float(landing.get("lat") or previous.get("lat") or 0)
+            landing["lon"] = float(landing.get("lon") or previous.get("lon") or 0)
+            landing["altitude"] = 0
+            converted[index] = landing
+            break
+    return converted
+
+
+def _waypoint_only_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            **dict(item),
+            "command": "WAYPOINT",
+        }
+        for item in items
+    ]
+
+
+def _waypoint_land_compat_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    converted: list[dict[str, Any]] = []
+    last_index = len(items) - 1
+    for index, item in enumerate(items):
+        next_item = dict(item)
+        command = str(next_item.get("command", "WAYPOINT")).upper()
+        if index == 0 and command == "TAKEOFF":
+            next_item["command"] = "TAKEOFF"
+        elif index == last_index and command in {"LAND", "RTL"}:
+            next_item["command"] = "LAND"
+            previous = converted[-1] if converted else next_item
+            next_item["lat"] = float(next_item.get("lat") or previous.get("lat") or 0)
+            next_item["lon"] = float(next_item.get("lon") or previous.get("lon") or 0)
+            next_item["altitude"] = 0
+        else:
+            next_item["command"] = "WAYPOINT"
+        converted.append(next_item)
+    return converted
+
+
+def _mission_signature(items: list[dict[str, Any]]) -> tuple[tuple[str, float, float, float], ...]:
+    signature = []
+    for item in items:
+        signature.append(
+            (
+                str(item.get("command", "WAYPOINT")).upper(),
+                round(float(item.get("lat") or 0), 7),
+                round(float(item.get("lon") or 0), 7),
+                round(float(item.get("altitude") or 0), 2),
+            )
+        )
+    return tuple(signature)
+
+
+def mission_upload_attempts(
+    master: Any,
+    waypoints: list[dict[str, Any]],
+) -> tuple[list[tuple[str, list[dict[str, Any]]]], dict[str, Any]]:
+    base_items = expand_mission_upload_items(waypoints)
+    profile = vehicle_mission_profile(master)
+    vehicle_profile = str(profile["profile"])
+    attempts: list[tuple[str, list[dict[str, Any]]]] = []
+    seen: set[tuple[tuple[str, float, float, float], ...]] = set()
+
+    def add(name: str, items: list[dict[str, Any]]) -> None:
+        signature = _mission_signature(items)
+        if signature in seen:
+            return
+        seen.add(signature)
+        attempts.append((name, items))
+
+    if vehicle_profile == "multicopter":
+        add("mc_px4_qgc", base_items)
+        if any(str(item.get("command", "WAYPOINT")).upper() == "RTL" for item in base_items):
+            add("mc_rtl_as_land", _replace_terminal_rtl_with_land(base_items))
+        add("mc_waypoint_land_compat", _waypoint_land_compat_items(base_items))
+    elif vehicle_profile == "fixed_wing":
+        add("fw_px4_qgc", base_items)
+        if any(str(item.get("command", "WAYPOINT")).upper() == "RTL" for item in base_items):
+            add("fw_rtl_as_land_compat", _replace_terminal_rtl_with_land(base_items))
+    elif vehicle_profile == "vtol":
+        add("vtol_px4_qgc", base_items)
+        if any(str(item.get("command", "WAYPOINT")).upper() == "RTL" for item in base_items):
+            add("vtol_rtl_as_land", _replace_terminal_rtl_with_land(base_items))
+        add("vtol_waypoint_land_compat", _waypoint_land_compat_items(base_items))
+    else:
+        add("qgc_px4_nav", base_items)
+        if any(str(item.get("command", "WAYPOINT")).upper() == "RTL" for item in base_items):
+            add("px4_rtl_as_land", _replace_terminal_rtl_with_land(base_items))
+        add("px4_waypoint_land_compat", _waypoint_land_compat_items(base_items))
+
+    return attempts, profile
 
 
 def send_mission_item(
@@ -221,11 +391,17 @@ def send_mission_item(
                 payload["z"],
             )
             return payload
+    legacy_frame = payload["frame"]
+    legacy_x = payload["x"] / 1e7
+    legacy_y = payload["y"] / 1e7
+    if legacy_frame == FRAME_MISSION:
+        legacy_x = payload["x"]
+        legacy_y = payload["y"]
     args = [
         master.target_system,
         master.target_component,
         payload["seq"],
-        getattr(mavutil.mavlink, "MAV_FRAME_GLOBAL_RELATIVE_ALT", 3),
+        legacy_frame,
         payload["command"],
         payload["current"],
         payload["autocontinue"],
@@ -233,8 +409,8 @@ def send_mission_item(
         payload["param2"],
         payload["param3"],
         payload["param4"],
-        payload["x"] / 1e7,
-        payload["y"] / 1e7,
+        legacy_x,
+        legacy_y,
         payload["z"],
     ]
     try:
@@ -270,16 +446,65 @@ def upload_mission(
     waypoints = list(waypoints or [])
     if not waypoints:
         raise RuntimeError("Mission has no waypoints")
-    upload_items = expand_mission_upload_items(waypoints)
+    attempts, profile_info = mission_upload_attempts(master, waypoints)
+
+    last_result: dict[str, Any] | None = None
+    for attempt_index, (profile, upload_items) in enumerate(attempts):
+        result = _upload_mission_once(
+            master,
+            upload_items,
+            command_id=command_id,
+            clear_existing=clear_existing or attempt_index > 0,
+            on_message=on_message,
+            mission_commands=mission_commands,
+            accepted_ack=accepted_ack,
+            mission_type=mission_type,
+            source_waypoint_count=len(waypoints),
+            profile=profile,
+            profile_info=profile_info,
+            retry_on_unsupported=attempt_index < len(attempts) - 1,
+        )
+        last_result = result
+        ack_type = int((result.get("ack") or {}).get("type", -1))
+        if ack_type == accepted_ack:
+            return
+        if ack_type not in MAV_MISSION_UNSUPPORTED_RESULTS:
+            return
+
+    if last_result is not None:
+        return
+
+
+def _upload_mission_once(
+    master: Any,
+    upload_items: list[dict[str, Any]],
+    command_id: str | None = None,
+    clear_existing: bool = True,
+    on_message: Callable[[Any], None] | None = None,
+    *,
+    mission_commands: dict[str, int] | None = None,
+    accepted_ack: int = MAV_MISSION_ACCEPTED,
+    mission_type: int = MAV_MISSION_TYPE_MISSION,
+    source_waypoint_count: int | None = None,
+    profile: str = "qgc_px4_nav",
+    profile_info: dict[str, Any] | None = None,
+    retry_on_unsupported: bool = False,
+) -> dict[str, Any]:
+    upload_items = list(upload_items or [])
+    source_waypoint_count = int(source_waypoint_count if source_waypoint_count is not None else len(upload_items))
+    profile_info = dict(profile_info or {})
     write_command_status(
         command_id,
         status="running",
-        message=f"Uploading Mission: 0/{len(upload_items)}",
+        message=f"Uploading Mission ({profile}): 0/{len(upload_items)}",
         results=[{
             "count": len(upload_items),
-            "sourceWaypointCount": len(waypoints),
+            "sourceWaypointCount": source_waypoint_count,
             "uploaded": 0,
             "progress": 0,
+            "profile": profile,
+            "vehicleProfile": profile_info,
+            "items": _mission_item_summary(upload_items, mission_commands),
         }],
     )
     if clear_existing:
@@ -316,10 +541,13 @@ def upload_mission(
                     message=f"Mission upload waiting for vehicle request; resent MISSION_COUNT {count_retries}/3",
                     results=[{
                         "count": len(upload_items),
-                        "sourceWaypointCount": len(waypoints),
+                        "sourceWaypointCount": source_waypoint_count,
                         "uploaded": len(sent),
                         "progress": round(len(sent) * 100 / len(upload_items), 1),
                         "countRetries": count_retries,
+                        "profile": profile,
+                        "vehicleProfile": profile_info,
+                        "items": _mission_item_summary(upload_items, mission_commands),
                     }],
                 )
             continue
@@ -347,11 +575,15 @@ def upload_mission(
                 message=f"Uploading Mission: {len(sent)}/{len(upload_items)}",
                 results=[{
                     "count": len(upload_items),
-                    "sourceWaypointCount": len(waypoints),
+                    "sourceWaypointCount": source_waypoint_count,
                     "uploaded": len(sent),
                     "progress": progress,
                     "lastSeq": seq,
                     "lastCommand": payload["name"],
+                    "lastPayload": payload,
+                    "profile": profile,
+                    "vehicleProfile": profile_info,
+                    "items": _mission_item_summary(upload_items, mission_commands),
                 }],
             )
             deadline = time.monotonic() + 8.0
@@ -359,6 +591,7 @@ def upload_mission(
         if msg_type == "MISSION_ACK":
             ack_type = int(getattr(message, "type", -1))
             accepted = ack_type == accepted_ack
+            will_retry = bool(retry_on_unsupported and ack_type in MAV_MISSION_UNSUPPORTED_RESULTS)
             verification = None
             if accepted:
                 verification = verify_uploaded_mission(
@@ -370,32 +603,51 @@ def upload_mission(
                 )
             result = {
                 "count": len(upload_items),
-                "sourceWaypointCount": len(waypoints),
+                "sourceWaypointCount": source_waypoint_count,
                 "uploaded": len(sent),
                 "progress": 100 if accepted else round(len(sent) * 100 / len(upload_items), 1),
                 "ack": {"type": ack_type, "resultText": mission_ack_text(ack_type)},
                 "verified": bool(verification and verification.get("matched")),
                 "verification": verification,
+                "profile": profile,
+                "vehicleProfile": profile_info,
+                "items": _mission_item_summary(upload_items, mission_commands),
             }
             write_command_status(
                 command_id,
-                status="accepted" if accepted and result["verified"] else ("partial" if accepted else "rejected"),
+                status=(
+                    "accepted"
+                    if accepted and result["verified"]
+                    else ("partial" if accepted else ("running" if will_retry else "rejected"))
+                ),
                 message=(
-                    f"Mission upload completed and readback verification passed: {len(waypoints)} waypoints, {len(upload_items)} mission items"
+                    f"Mission upload completed and readback verification passed: {source_waypoint_count} waypoints, {len(upload_items)} mission items ({profile})"
                     if accepted and result["verified"]
                     else f"Mission accepted by vehicle but readback verification failed: {(verification or {}).get('reason', 'no verification')}"
                     if accepted
-                    else f"Mission upload failed: {mission_ack_text(ack_type)}"
+                    else f"PX4 rejected Mission profile {profile}: {mission_ack_text(ack_type)}; trying next compatible profile"
+                    if will_retry
+                    else f"Mission upload failed: {mission_ack_text(ack_type)} ({profile})"
                 ),
                 results=[result],
             )
-            return
+            return result
+    timeout_result = {
+        "count": len(upload_items),
+        "uploaded": len(sent),
+        "progress": round(len(sent) * 100 / len(upload_items), 1),
+        "ack": {"type": -1, "resultText": "TIMEOUT"},
+        "profile": profile,
+        "vehicleProfile": profile_info,
+        "items": _mission_item_summary(upload_items, mission_commands),
+    }
     write_command_status(
         command_id,
         status="rejected",
         message="Mission upload timed out: no complete MISSION_REQUEST/MISSION_ACK flow",
-        results=[{"count": len(upload_items), "uploaded": len(sent), "progress": round(len(sent) * 100 / len(upload_items), 1)}],
+        results=[timeout_result],
     )
+    return timeout_result
 
 
 def request_mission_item(master: Any, seq: int, mission_type: int = MAV_MISSION_TYPE_MISSION) -> None:

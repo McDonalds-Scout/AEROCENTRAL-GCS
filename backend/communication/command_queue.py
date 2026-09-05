@@ -8,6 +8,7 @@ file contract so the UI and connector keep working during the refactor.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from typing import Any
@@ -50,7 +51,10 @@ TRANSIENT_ACTUATOR_COMMANDS = {"set_servo", "test_motor"}
 def _read_status_file() -> dict[str, Any]:
     for attempt in range(5):
         try:
-            statuses = json.loads(COMMAND_STATUS.read_text(encoding="utf-8"))
+            statuses = json.loads(
+                COMMAND_STATUS.read_text(encoding="utf-8"),
+                parse_constant=lambda _value: None,
+            )
             return statuses if isinstance(statuses, dict) else {}
         except FileNotFoundError:
             return {}
@@ -63,18 +67,28 @@ def _read_status_file() -> dict[str, Any]:
     return {}
 
 
+def json_safe(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return value
+
+
 def write_command_status(command_id: str | None, **status: Any) -> None:
     if not command_id:
         return
     COMMAND_STATUS.parent.mkdir(parents=True, exist_ok=True)
     statuses = _read_status_file()
 
-    statuses[command_id] = {
+    statuses[command_id] = json_safe({
         **statuses.get(command_id, {}),
         **status,
         "updatedAt": int(time.time() * 1000),
-    }
-    payload = json.dumps(statuses, ensure_ascii=False, indent=2)
+    })
+    payload = json.dumps(json_safe(statuses), ensure_ascii=False, indent=2, allow_nan=False)
     for attempt in range(5):
         temporary = COMMAND_STATUS.with_name(f"{COMMAND_STATUS.stem}.{os.getpid()}.{time.time_ns()}.tmp")
         try:

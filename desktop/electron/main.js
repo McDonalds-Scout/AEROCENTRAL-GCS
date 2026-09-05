@@ -7,6 +7,11 @@ const path = require("path");
 
 const APP_NAME = "AeroCentral";
 const PORT_FALLBACKS = [8080, 8094, 8095, 8096, 8097];
+const PACKAGED_PROCESS_NAMES = new Set([
+  "ground_station_server.exe",
+  "px6c_connector.exe",
+  "mavlink_simulator.exe"
+]);
 
 let mainWindow = null;
 let backendProcess = null;
@@ -16,6 +21,27 @@ let ownsBackend = false;
 
 const SMOKE_TEST = process.argv.includes("--smoke-test");
 const FORCE_OWN_BACKEND = process.argv.includes("--force-own-backend");
+const ALLOW_BACKEND_REUSE = process.argv.includes("--reuse-backend") || process.env.AEROCENTRAL_REUSE_BACKEND === "1";
+
+app.commandLine.appendSwitch("disable-http-cache");
+app.commandLine.appendSwitch("disk-cache-size", "0");
+
+let isPrimaryInstance = true;
+if (!SMOKE_TEST) {
+  const gotSingleInstanceLock = app.requestSingleInstanceLock();
+  if (!gotSingleInstanceLock) {
+    isPrimaryInstance = false;
+    app.quit();
+  } else {
+    app.on("second-instance", () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      refreshMainWindow({ hard: true }).catch(() => {});
+    });
+  }
+}
+
 function cliArgValue(prefix) {
   const match = process.argv.find((arg) => arg.startsWith(prefix));
   return match ? match.slice(prefix.length) : "";
@@ -112,6 +138,25 @@ function firstExisting(paths) {
   return paths.find((candidate) => candidate && fs.existsSync(candidate)) || "";
 }
 
+function frontendResourceRoot(root) {
+  const candidates = app.isPackaged
+    ? [
+        path.join(process.resourcesPath, "frontend"),
+        path.join(process.resourcesPath, "app"),
+        root
+      ]
+    : [root];
+  return firstExisting(candidates.filter((candidate) => {
+    try {
+      return fs.existsSync(path.join(candidate, "index.html"))
+        && fs.existsSync(path.join(candidate, "app.js"))
+        && fs.existsSync(path.join(candidate, "styles.css"));
+    } catch (_) {
+      return false;
+    }
+  }));
+}
+
 function pythonCommand(root) {
   const explicit = process.env.PYTHON_EXE || process.env.PYTHON;
   if (explicit) return { command: explicit, args: [path.join(root, "ground_station_server.py")] };
@@ -141,6 +186,82 @@ function backendCommand(root) {
   return pythonCommand(root);
 }
 
+function normalizeForCompare(value) {
+  return path.resolve(value || "").toLowerCase();
+}
+
+function isPathInside(childPath, parentPath) {
+  const child = normalizeForCompare(childPath);
+  const parent = normalizeForCompare(parentPath);
+  return child === parent || child.startsWith(`${parent}${path.sep}`);
+}
+
+function listPackagedBackendProcesses(root) {
+  if (process.platform !== "win32") return [];
+  const script = [
+    "$ErrorActionPreference='SilentlyContinue'",
+    "$names=@('ground_station_server.exe','px6c_connector.exe','mavlink_simulator.exe')",
+    "Get-CimInstance Win32_Process | Where-Object { $names -contains $_.Name } | Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress"
+  ].join("; ");
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    windowsHide: true,
+    encoding: "utf8",
+    timeout: 6000
+  });
+  if (result.status !== 0 || !result.stdout.trim()) return [];
+  try {
+    const parsed = JSON.parse(result.stdout.trim());
+    return (Array.isArray(parsed) ? parsed : [parsed])
+      .filter((item) => item && PACKAGED_PROCESS_NAMES.has(String(item.Name || "").toLowerCase()))
+      .filter((item) => item.ExecutablePath && isPathInside(item.ExecutablePath, root));
+  } catch (_) {
+    return [];
+  }
+}
+
+function killProcessTree(pid) {
+  if (!pid) return false;
+  try {
+    const result = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+      windowsHide: true,
+      stdio: "ignore",
+      timeout: 6000
+    });
+    return result.status === 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+function cleanupStalePackagedBackendProcesses({ reason = "startup" } = {}) {
+  const root = backendRoot();
+  const processes = listPackagedBackendProcesses(root)
+    .filter((item) => Number(item.ProcessId) !== process.pid)
+    .filter((item) => !backendProcess || Number(item.ProcessId) !== Number(backendProcess.pid));
+  const killed = [];
+  for (const item of processes) {
+    if (killProcessTree(item.ProcessId)) {
+      killed.push({
+        pid: Number(item.ProcessId),
+        name: item.Name,
+        path: item.ExecutablePath
+      });
+    }
+  }
+  if (killed.length) {
+    try {
+      fs.appendFileSync(
+        logFile("desktop-cleanup.log"),
+        `${new Date().toISOString()} ${reason} ${JSON.stringify(killed)}\n`,
+        "utf8"
+      );
+    } catch (_) {
+      // Cleanup logging is diagnostic only.
+    }
+  }
+  return killed;
+}
+
 function logFile(name) {
   const logDir = path.join(userDataDir(), "logs");
   fs.mkdirSync(logDir, { recursive: true });
@@ -167,8 +288,9 @@ function startBackend() {
     GCS_DESKTOP: "1",
     GCS_DATA_DIR: userDataDir()
   };
-  if (!usesPackagedBackend) {
-    env.GCS_RESOURCE_ROOT = root;
+  const frontendRoot = frontendResourceRoot(root);
+  if (frontendRoot) {
+    env.GCS_RESOURCE_ROOT = frontendRoot;
   }
   const stdout = fs.openSync(logFile("backend.out.log"), "a");
   const stderr = fs.openSync(logFile("backend.err.log"), "a");
@@ -331,6 +453,17 @@ async function refreshMainWindow({ hard = false } = {}) {
   return { ok: true, hard: Boolean(hard), backendUrl };
 }
 
+async function clearFrontendRuntimeCache() {
+  const session = mainWindow?.webContents?.session;
+  if (!session) return;
+  try {
+    await session.clearCache();
+    await session.clearStorageData({ storages: ["serviceworkers", "cachestorage"] });
+  } catch (_) {
+    // Cache cleanup should never block flight operations startup.
+  }
+}
+
 function buildMenu() {
   return Menu.buildFromTemplate([
     {
@@ -446,9 +579,12 @@ async function createWindow() {
   });
 
   Menu.setApplicationMenu(buildMenu());
+  await clearFrontendRuntimeCache();
 
+  cleanupStalePackagedBackendProcesses({ reason: "startup" });
+  const shouldReuseBackend = ALLOW_BACKEND_REUSE && !FORCE_OWN_BACKEND;
   const existingBackendUrls = await snapshotBackendUrls();
-  backendUrl = FORCE_OWN_BACKEND ? "" : await findBackendUrl();
+  backendUrl = shouldReuseBackend ? await findBackendUrl() : "";
   if (!backendUrl) {
     startBackend();
     backendUrl = await waitForBackend({ excludeUrls: existingBackendUrls });
@@ -465,7 +601,7 @@ async function createWindow() {
     return;
   }
 
-  await mainWindow.loadURL(backendUrl);
+  await mainWindow.loadURL(`${backendUrl}?desktop=${Date.now()}`);
   autoConnectMavlink().catch(() => {});
 }
 
@@ -491,8 +627,9 @@ function stopBackend() {
 
 async function runSmokeTest() {
   loadDesktopConfig();
+  cleanupStalePackagedBackendProcesses({ reason: "smoke-test" });
   const existingBackendUrls = await snapshotBackendUrls();
-  backendUrl = FORCE_OWN_BACKEND ? "" : await findBackendUrl();
+  backendUrl = ALLOW_BACKEND_REUSE && !FORCE_OWN_BACKEND ? await findBackendUrl() : "";
   const reusedExistingBackend = Boolean(backendUrl);
   if (!backendUrl) {
     startBackend();
@@ -539,6 +676,7 @@ async function runSmokeTest() {
 }
 
 app.whenReady().then(() => {
+  if (!isPrimaryInstance) return;
   if (SMOKE_TEST) {
     runSmokeTest();
   } else {

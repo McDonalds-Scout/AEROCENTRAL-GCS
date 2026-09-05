@@ -1243,13 +1243,14 @@ def update_state(state, message):
     return True
 
 
-def connect(connection, baud, source_system=255, source_component=None):
+def connect(connection, baud, source_system=255, source_component=None, udp_target=None):
     print(f"Connecting PX6C/Pixhawk 6C: {connection} @ {baud}")
     master, heartbeat = connection_manager.connect(
         connection,
         baud,
         source_system=source_system,
         source_component=source_component or mavutil.mavlink.MAV_COMP_ID_MISSIONPLANNER,
+        udp_target=udp_target,
     )
     if heartbeat.autopilot != mavutil.mavlink.MAV_AUTOPILOT_PX4:
         print("Warning: MAVLink heartbeat received, but autopilot is not PX4; continuing in compatible mode.")
@@ -1284,6 +1285,11 @@ def main():
         "--ui",
         default="http://127.0.0.1:8080/api/telemetry",
     )
+    parser.add_argument(
+        "--udp-target",
+        default="",
+        help="Optional UDP peer host:port used to send GCS heartbeat from a udpin listener before any vehicle packet is received.",
+    )
     parser.add_argument("--vehicle", default="PX6C-01")
     args = parser.parse_args()
 
@@ -1302,6 +1308,7 @@ def main():
                 args.baud,
                 source_system=args.source_system,
                 source_component=args.source_component,
+                udp_target=args.udp_target or None,
             )
             monitor = CommunicationMonitor()
             message_bus = MessageBus(monitor=monitor)

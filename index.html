@@ -10,7 +10,7 @@
   <title>AEROCENTRAL Ground Control Station</title>
   <link rel="icon" type="image/png" href="assets/aerocentral-logo.png">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=gcs-69">
+  <link rel="stylesheet" href="styles.css?v=gcs-71">
 </head>
 <body>
   <div class="app-shell">
@@ -209,7 +209,12 @@
             <div class="map-tools">
               <button data-map-action="zoom-in" title="放大">＋</button><button data-map-action="zoom-out" title="缩小">−</button><button data-map-action="locate" title="定位">⌖</button><button data-map-action="follow" title="自动跟随">◎</button><button data-map-action="clear-track" title="清除轨迹">×</button>
             </div>
-            <div class="map-legend"><span><i class="uav03"></i>实时位置</span><span><i class="route"></i>实际航迹</span></div>
+            <div class="map-legend">
+              <span><i class="uav03"></i>实时位置</span>
+              <span><i class="route"></i>实际航迹</span>
+              <span><i class="mission-route"></i>计划航线</span>
+              <span><i class="mission-point"></i>航点</span>
+            </div>
             <div class="map-telemetry-overlay" id="mapTelemetryOverlay">
               <div><small>纬度</small><strong id="mapLat">--</strong></div>
               <div><small>经度</small><strong id="mapLon">--</strong></div>
@@ -368,7 +373,7 @@
         </div>
         <div class="ops-grid connection-layout">
           <article class="panel form-panel">
-            <div class="panel-header"><div><h3>数据链路配置</h3><p>默认 UDP 监听 0.0.0.0:14550</p></div></div>
+            <div class="panel-header"><div><h3>数据链路配置</h3><p>WiFi UDP 默认本机监听 0.0.0.0:14550，并主动向目标飞控发送 GCS 心跳</p></div></div>
             <div class="panel-body form-stack">
               <label>连接方式
                 <select id="connectionType">
@@ -383,14 +388,14 @@
                 <label>波特率<select id="baudRate"><option>57600</option><option>115200</option><option>921600</option></select></label>
               </div>
               <div class="form-row udp-fields">
-                <label>UDP 监听地址<input id="listenAddress" value="0.0.0.0"></label>
+                <label>本机 UDP 监听地址<input id="listenAddress" value="0.0.0.0"></label>
                 <label>UDP 监听端口<input id="listenPort" type="number" value="14550"></label>
               </div>
               <div class="form-row udp-fields">
                 <label>目标飞控 IP<input id="targetIp" value="127.0.0.1"></label>
                 <label>目标飞控端口<input id="targetPort" type="number" value="14550"></label>
               </div>
-              <div class="connection-help udp-fields" id="udpListenHint">WiFi UDP 连接使用目标飞控 IP/端口；UDP 监听模式使用本机监听地址/端口。</div>
+              <div class="connection-help udp-fields" id="udpListenHint">WiFi UDP 连接：目标飞控 IP 填飞机/数传地址，本机监听地址通常填 0.0.0.0；不要把飞机 IP 填到本机监听地址。</div>
               <div class="udp-address-tools udp-fields">
                 <button class="ghost-button" id="useAnyUdpAddress" type="button">使用 0.0.0.0</button>
                 <button class="ghost-button" id="useDetectedUdpAddress" type="button">使用本机网卡 IP</button>
@@ -673,12 +678,18 @@
               <button class="ghost-button" id="addTakeoffPoint">添加起飞点</button>
               <button class="ghost-button" id="addLandPoint">添加降落点</button>
               <button class="ghost-button" id="addRtlPoint">添加返航</button>
+              <button class="ghost-button" id="applyMultirotorTemplate">四旋翼模板</button>
               <button class="ghost-button" id="applyFixedWingTemplate">固定翼模板</button>
               <button class="ghost-button" id="applyVtolTemplate">复合翼模板</button>
               <label class="route-import">导入 JSON<input id="importMissionFile" type="file" accept=".json"></label>
               <span id="routeEstimate">距离 -- km · 预计 -- min</span>
             </div>
-            <div id="missionMap"></div>
+            <div id="missionMap">
+              <div class="mission-map-status" id="missionMapStatus">
+                <strong>任务地图加载中</strong>
+                <small>若底图暂未显示，仍可等待网络瓦片加载或使用定位到飞机</small>
+              </div>
+            </div>
           </article>
           <article class="panel waypoint-panel">
             <div class="panel-header"><div><h3>航点表格</h3><p><span id="waypointCount">0</span> 个任务点</p></div></div>
@@ -830,7 +841,7 @@
   </div>
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="ui_modules/connection_diagnostics.js?v=gcs-68"></script>
-  <script src="ui_modules/realtime_instruments.js?v=gcs-70"></script>
-  <script src="app.js?v=gcs-70"></script>
+  <script src="ui_modules/realtime_instruments.js?v=gcs-71"></script>
+  <script src="app.js?v=gcs-71"></script>
 </body>
 </html>

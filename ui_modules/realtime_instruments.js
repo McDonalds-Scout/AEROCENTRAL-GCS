@@ -17,6 +17,19 @@
     return directions[Math.round(((degrees % 360 + 360) % 360) / 45) % directions.length];
   }
 
+  function setTextIfChanged(node, value) {
+    if (!node) return;
+    const text = value === null || value === undefined ? "" : String(value);
+    if (node.textContent !== text) node.textContent = text;
+  }
+
+  function setExclusiveStateClass(node, states, state) {
+    if (!node) return;
+    if (node.classList.contains(state) && states.every((item) => item === state || !node.classList.contains(item))) return;
+    node.classList.remove(...states);
+    node.classList.add(state);
+  }
+
   function createRealtimeInstruments(options = {}) {
     const dom = options.elements || {};
     const signedAngle = options.signedAngle || defaultSignedAngle;
@@ -41,14 +54,12 @@
     function setStatusOnline() {
       if (state.onlineApplied) return;
       if (dom.attitudeState) {
-        dom.attitudeState.textContent = "ATTITUDE 在线";
-        dom.attitudeState.classList.remove("offline");
-        dom.attitudeState.classList.add("online");
+        setTextIfChanged(dom.attitudeState, "ATTITUDE 在线");
+        setExclusiveStateClass(dom.attitudeState, ["offline", "online"], "online");
       }
       if (dom.compassState) {
-        dom.compassState.textContent = "罗盘在线";
-        dom.compassState.classList.remove("offline");
-        dom.compassState.classList.add("online");
+        setTextIfChanged(dom.compassState, "罗盘在线");
+        setExclusiveStateClass(dom.compassState, ["offline", "online"], "online");
       }
       state.onlineApplied = true;
     }
@@ -59,10 +70,10 @@
       state.onlineApplied = false;
       dom.smoothAttitudeOffline?.classList.add("visible");
       dom.smoothCompassOffline?.classList.add("visible");
-      if (dom.speed) dom.speed.textContent = "--";
-      if (dom.hudGroundSpeed) dom.hudGroundSpeed.textContent = "--";
-      if (dom.smoothAttitudeDebug) dom.smoothAttitudeDebug.textContent = `age -- · fps -- · ${transportMode()}`;
-      if (dom.smoothCompassDebug) dom.smoothCompassDebug.textContent = `age -- · fps -- · ${transportMode()}`;
+      setTextIfChanged(dom.speed, "--");
+      setTextIfChanged(dom.hudGroundSpeed, "--");
+      setTextIfChanged(dom.smoothAttitudeDebug, `age -- · fps -- · ${transportMode()}`);
+      setTextIfChanged(dom.smoothCompassDebug, `age -- · fps -- · ${transportMode()}`);
     }
 
     function setTarget(data = {}) {
@@ -111,27 +122,27 @@
       const yawText = `${state.current.yaw.toFixed(1)}°`;
       const headingText = `${String(Math.round(state.current.yaw)).padStart(3, "0")}°`;
       const cardinal = headingCardinal(state.current.yaw);
-      if (dom.pitchValue) dom.pitchValue.textContent = pitchText;
-      if (dom.rollValue) dom.rollValue.textContent = rollText;
-      if (dom.hudPitch) dom.hudPitch.textContent = pitchText;
-      if (dom.hudRoll) dom.hudRoll.textContent = rollText;
-      if (dom.hudYaw) dom.hudYaw.textContent = yawText;
-      if (dom.yawValue) dom.yawValue.textContent = yawText;
-      if (dom.headingValue) dom.headingValue.textContent = headingText;
-      if (dom.headingCardinal) dom.headingCardinal.textContent = cardinal;
-      if (dom.hudHeading) dom.hudHeading.textContent = headingText;
-      if (dom.hudHeadingCardinal) dom.hudHeadingCardinal.textContent = cardinal;
-      if (dom.connectionRoll) dom.connectionRoll.textContent = rollText;
-      if (dom.connectionPitch) dom.connectionPitch.textContent = pitchText;
-      if (dom.connectionYaw) dom.connectionYaw.textContent = yawText;
+      setTextIfChanged(dom.pitchValue, pitchText);
+      setTextIfChanged(dom.rollValue, rollText);
+      setTextIfChanged(dom.hudPitch, pitchText);
+      setTextIfChanged(dom.hudRoll, rollText);
+      setTextIfChanged(dom.hudYaw, yawText);
+      setTextIfChanged(dom.yawValue, yawText);
+      setTextIfChanged(dom.headingValue, headingText);
+      setTextIfChanged(dom.headingCardinal, cardinal);
+      setTextIfChanged(dom.hudHeading, headingText);
+      setTextIfChanged(dom.hudHeadingCardinal, cardinal);
+      setTextIfChanged(dom.connectionRoll, rollText);
+      setTextIfChanged(dom.connectionPitch, pitchText);
+      setTextIfChanged(dom.connectionYaw, yawText);
       if (state.target.speed !== null) {
         const speedText = formatSpeed(state.current.speed);
-        if (dom.speed) dom.speed.textContent = speedText;
-        if (dom.hudGroundSpeed) dom.hudGroundSpeed.textContent = speedText;
+        setTextIfChanged(dom.speed, speedText);
+        setTextIfChanged(dom.hudGroundSpeed, speedText);
       }
       const ageText = Number.isFinite(ageMs) ? `${Math.round(ageMs)}ms` : "--";
-      if (dom.smoothAttitudeDebug) dom.smoothAttitudeDebug.textContent = `age ${ageText} · fps ${state.fps} · ${transportMode()}`;
-      if (dom.smoothCompassDebug) dom.smoothCompassDebug.textContent = `age ${ageText} · fps ${state.fps} · ${transportMode()}`;
+      setTextIfChanged(dom.smoothAttitudeDebug, `age ${ageText} · fps ${state.fps} · ${transportMode()}`);
+      setTextIfChanged(dom.smoothCompassDebug, `age ${ageText} · fps ${state.fps} · ${transportMode()}`);
     }
 
     function frame(timestamp = 0) {

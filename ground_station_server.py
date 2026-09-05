@@ -610,9 +610,16 @@ def telemetry_payload():
             return {}
         age = time.monotonic() - LAST_PACKET_MONOTONIC
         data = STATE.to_dict()
-        if age >= 5 or not any(process.poll() is None for process in CONNECTION_PROCESSES):
+        process_running = any(process.poll() is None for process in CONNECTION_PROCESSES) or any(
+            is_pid_running(pid) for pid in read_connection_pid_file()
+        )
+        if age >= 5:
             data["connected"] = False
             data["stale"] = True
+        else:
+            data["connected"] = True
+            data["stale"] = False
+            data["processRunning"] = process_running
         data["ageSeconds"] = round(age, 1)
         data["receivedAt"] = LAST_PACKET_WALL_MS
         data["packetSeq"] = TELEMETRY_SEQUENCE
@@ -985,6 +992,70 @@ def kill_process_tree(pid):
             os.kill(pid, 15)
     except Exception:
         pass
+
+
+def process_name_for_pid(pid):
+    if os.name != "nt" or not pid:
+        return ""
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        line = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
+        if not line or "INFO:" in line:
+            return ""
+        return line.split('","', 1)[0].strip('"')
+    except Exception:
+        return ""
+
+
+def udp_port_owners(ports):
+    if os.name != "nt":
+        return []
+    wanted = {int(port) for port in ports if port}
+    if not wanted:
+        return []
+    owners = []
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano", "-p", "udp"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+    except Exception:
+        return owners
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 4 or parts[0].upper() != "UDP":
+            continue
+        local = parts[1]
+        pid_text = parts[-1]
+        try:
+            local_port = int(local.rsplit(":", 1)[1])
+            pid = int(pid_text)
+        except (IndexError, ValueError):
+            continue
+        if local_port in wanted and pid and pid != os.getpid():
+            owners.append({"pid": pid, "port": local_port, "name": process_name_for_pid(pid)})
+    return owners
+
+
+def cleanup_stale_px6c_udp_processes(ports):
+    cleaned = []
+    for owner in udp_port_owners(ports):
+        name = str(owner.get("name") or "").lower()
+        if name != "px6c_connector.exe":
+            continue
+        pid = int(owner.get("pid") or 0)
+        if not pid:
+            continue
+        kill_process_tree(pid)
+        cleaned.append(owner)
+    return cleaned
 
 
 def write_connection_pid_file():
@@ -2190,6 +2261,13 @@ def start_connection(config):
     stop_connection()
     CONNECTION_CONFIG = {**CONNECTION_CONFIG, **config}
     kind = CONNECTION_CONFIG["type"]
+    if kind in {"udp", "udp_listen", "demo"}:
+        try:
+            cleaned = cleanup_stale_px6c_udp_processes([int(CONNECTION_CONFIG.get("listenPort") or DEFAULT_MAVLINK_LISTEN_PORT)])
+            if cleaned:
+                CONNECTION_CONFIG["portCleanup"] = cleaned
+        except Exception:
+            CONNECTION_CONFIG["portCleanup"] = []
     python = sys.executable
     if not getattr(sys, "frozen", False):
         dependency_check = subprocess.run(
@@ -2251,12 +2329,16 @@ def start_connection(config):
     elif kind == "udp":
         target_ip = str(CONNECTION_CONFIG.get("targetIp", DEFAULT_MAVLINK_HOST) or DEFAULT_MAVLINK_HOST).strip()
         target_port = int(CONNECTION_CONFIG.get("targetPort") or CONNECTION_CONFIG.get("listenPort", DEFAULT_MAVLINK_TARGET_PORT))
-        connection = f"udpout:{target_ip}:{target_port}"
-        CONNECTION_CONFIG["effectiveConnection"] = connection
-        CONNECTION_CONFIG["effectiveListenAddress"] = ""
+        listen_address = validate_udp_listen_address(CONNECTION_CONFIG.get("listenAddress", "0.0.0.0"))
+        listen_port = int(CONNECTION_CONFIG.get("listenPort", DEFAULT_MAVLINK_LISTEN_PORT) or DEFAULT_MAVLINK_LISTEN_PORT)
+        connection = f"udpin:{listen_address}:{listen_port}"
+        udp_target = f"{target_ip}:{target_port}"
+        CONNECTION_CONFIG["effectiveConnection"] = f"{connection} -> {udp_target}"
+        CONNECTION_CONFIG["effectiveListenAddress"] = listen_address
         command = [
             *packaged_entry_command("px6c_connector.py", python),
             "--connection", connection,
+            "--udp-target", udp_target,
             "--ui", f"http://127.0.0.1:{PORT}/api/telemetry",
             "--vehicle", "PX6C-01",
         ]
@@ -2265,7 +2347,7 @@ def start_connection(config):
     elif kind == "udp_listen":
         address = str(CONNECTION_CONFIG.get("listenAddress", "0.0.0.0") or "0.0.0.0").strip()
         listen_port = int(CONNECTION_CONFIG.get("listenPort", 14550))
-        bind_address = address
+        bind_address = validate_udp_listen_address(address)
         CONNECTION_CONFIG["effectiveListenAddress"] = bind_address
         CONNECTION_CONFIG["effectiveConnection"] = f"udpin:{bind_address}:{listen_port}"
         command = [
