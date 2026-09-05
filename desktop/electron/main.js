@@ -131,7 +131,10 @@ function backendRoot() {
 
 function backendExecutablePath(root) {
   const suffix = process.platform === "win32" ? ".exe" : "";
-  return path.join(root, `ground_station_server${suffix}`);
+  return firstExisting([
+    path.join(root, "ground_station_server", `ground_station_server${suffix}`),
+    path.join(root, `ground_station_server${suffix}`)
+  ]) || path.join(root, `ground_station_server${suffix}`);
 }
 
 function firstExisting(paths) {

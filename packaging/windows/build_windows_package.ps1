@@ -129,7 +129,7 @@ $BackendHiddenImports += @(
 
 Invoke-Step "[3/6] Building backend executable" {
     Invoke-PyInstaller @(
-        "--noconfirm", "--clean", "--onefile", "--console",
+        "--noconfirm", "--clean", "--onedir", "--console",
         "--name", "ground_station_server",
         "--distpath", $DistRoot,
         "--workpath", (Join-Path $BuildRoot "server"),
@@ -142,7 +142,7 @@ Invoke-Step "[3/6] Building backend executable" {
 
 Invoke-Step "[4/6] Building MAVLink connector executables" {
     Invoke-PyInstaller @(
-        "--noconfirm", "--clean", "--onefile", "--console",
+        "--noconfirm", "--clean", "--onedir", "--console",
         "--name", "px6c_connector",
         "--distpath", $DistRoot,
         "--workpath", (Join-Path $BuildRoot "connector"),
@@ -151,7 +151,7 @@ Invoke-Step "[4/6] Building MAVLink connector executables" {
         (Get-ProjectPath "px6c_connector.py")
     )
     Invoke-PyInstaller @(
-        "--noconfirm", "--clean", "--onefile", "--console",
+        "--noconfirm", "--clean", "--onedir", "--console",
         "--name", "mavlink_simulator",
         "--distpath", $DistRoot,
         "--workpath", (Join-Path $BuildRoot "simulator"),

@@ -55,8 +55,15 @@ def packaged_entry_command(script_name: str, python_executable: str | None = Non
     stem = Path(script_name).stem
     if is_packaged():
         suffix = ".exe" if os.name == "nt" else ""
-        executable = Path(sys.executable).with_name(f"{stem}{suffix}")
-        if executable.exists():
-            return [str(executable)]
+        executable_dir = Path(sys.executable).resolve().parent
+        candidates = [
+            executable_dir / stem / f"{stem}{suffix}",
+            executable_dir / f"{stem}{suffix}",
+            executable_dir.parent / stem / f"{stem}{suffix}",
+            executable_dir.parent / f"{stem}{suffix}",
+        ]
+        for executable in candidates:
+            if executable.exists():
+                return [str(executable)]
     python = python_executable or sys.executable
     return [python, str(resource_root() / script_name)]

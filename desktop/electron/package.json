@@ -1,7 +1,7 @@
 {
   "name": "aerocentral-gcs-desktop",
   "productName": "AeroCentral",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Desktop shell for the AeroCentral PX4/MAVLink Ground Control Station.",
   "main": "main.js",
   "author": "AeroCentral Project",

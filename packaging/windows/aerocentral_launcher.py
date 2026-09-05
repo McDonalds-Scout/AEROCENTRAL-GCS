@@ -50,9 +50,12 @@ def existing_server_url() -> str | None:
 
 def server_command(root: Path) -> list[str]:
     suffix = ".exe" if os.name == "nt" else ""
-    packaged_server = root / f"ground_station_server{suffix}"
-    if packaged_server.exists():
-        return [str(packaged_server)]
+    for packaged_server in (
+        root / "ground_station_server" / f"ground_station_server{suffix}",
+        root / f"ground_station_server{suffix}",
+    ):
+        if packaged_server.exists():
+            return [str(packaged_server)]
     return [sys.executable, str(root / "ground_station_server.py")]
 
 
